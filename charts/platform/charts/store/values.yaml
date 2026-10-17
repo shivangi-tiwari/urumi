@@ -1,0 +1,44 @@
+nameOverride: store
+
+database:
+  image: mariadb:11.4
+  name: wordpress
+  user: wordpress
+  rootPassword: ""
+  password: ""
+  storage: 8Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+wordpress:
+  image: wordpress:6.8.3-php8.3-apache
+  cliImage: wordpress:cli-php8.3
+  woocommerceVersion: 10.3.6
+  siteUrl: http://shop.127.0.0.1.nip.io
+  siteTitle: Urumi Shop
+  adminUser: admin
+  adminEmail: admin@example.com
+  adminPassword: ""
+  apiUser: urumi-api
+  apiEmail: urumi-api@example.com
+  storage: 8Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+kubectlImage: bitnamilegacy/kubectl:1.31.4
+
+ingress:
+  host: shop.127.0.0.1.nip.io
+
+service:
+  port: 80

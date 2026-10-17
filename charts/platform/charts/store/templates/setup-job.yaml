@@ -1,0 +1,153 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: wordpress-setup
+  labels:
+    {{- include "store.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 1800
+  template:
+    metadata:
+      labels:
+        app: wordpress-setup
+    spec:
+      serviceAccountName: wordpress-setup
+      automountServiceAccountToken: true
+      restartPolicy: Never
+      securityContext:
+        fsGroup: 33
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: check-api-secret
+          image: {{ .Values.kubectlImage | quote }}
+          command:
+            - sh
+            - -ec
+            - |
+              password="$(kubectl get secret woo-api -o jsonpath='{.data.password}')"
+              if [ -n "$password" ]; then
+                touch /shared/reuse-api-password
+              else
+                touch /shared/generate-api-password
+              fi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            {{- toYaml .Values.wordpress.resources | nindent 12 }}
+          volumeMounts:
+            - name: shared
+              mountPath: /shared
+      containers:
+        - name: wordpress-setup
+          image: {{ .Values.wordpress.cliImage | quote }}
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - /scripts/setup-wordpress.sh
+          env:
+            - name: SITE_URL
+              value: {{ .Values.wordpress.siteUrl | quote }}
+            - name: SITE_TITLE
+              value: {{ .Values.wordpress.siteTitle | quote }}
+            - name: WP_ADMIN_USER
+              value: {{ .Values.wordpress.adminUser | quote }}
+            - name: WP_ADMIN_EMAIL
+              value: {{ .Values.wordpress.adminEmail | quote }}
+            - name: WP_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: store-database
+                  key: wordpress-admin-password
+            - name: API_USER
+              value: {{ .Values.wordpress.apiUser | quote }}
+            - name: API_EMAIL
+              value: {{ .Values.wordpress.apiEmail | quote }}
+            - name: WOOCOMMERCE_VERSION
+              value: {{ .Values.wordpress.woocommerceVersion | quote }}
+            - name: WORDPRESS_DB_HOST
+              value: mariadb:3306
+            - name: WORDPRESS_DB_NAME
+              value: {{ .Values.database.name | quote }}
+            - name: WORDPRESS_DB_USER
+              value: {{ .Values.database.user | quote }}
+            - name: WORDPRESS_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: store-database
+                  key: database-password
+          resources:
+            {{- toYaml .Values.wordpress.resources | nindent 12 }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 33
+            runAsGroup: 33
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: wordpress-data
+              mountPath: /var/www/html
+            - name: scripts
+              mountPath: /scripts
+              readOnly: true
+            - name: shared
+              mountPath: /shared
+        - name: write-api-secret
+          image: {{ .Values.kubectlImage | quote }}
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -ec
+            - |
+              if [ -f /shared/reuse-api-password ]; then
+                exit 0
+              fi
+              until [ -s /shared/woo-api-credentials ] || [ -f /shared/setup-failed ]; do
+                sleep 2
+              done
+              if [ -f /shared/setup-failed ]; then
+                echo "WordPress setup failed; see the wordpress-setup container logs." >&2
+                exit 1
+              fi
+              username="$(sed -n '1p' /shared/woo-api-credentials)"
+              password="$(sed -n '2p' /shared/woo-api-credentials)"
+              username_b64="$(printf '%s' "$username" | base64 | tr -d '\n')"
+              password_b64="$(printf '%s' "$password" | base64 | tr -d '\n')"
+              printf '{"data":{"username":"%s","password":"%s"}}' \
+                "$username_b64" "$password_b64" > /shared/woo-api-patch.json
+              kubectl patch secret woo-api --type=merge --patch-file=/shared/woo-api-patch.json
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            {{- toYaml .Values.wordpress.resources | nindent 12 }}
+          volumeMounts:
+            - name: shared
+              mountPath: /shared
+      volumes:
+        - name: wordpress-data
+          persistentVolumeClaim:
+            claimName: wordpress-data
+        - name: scripts
+          configMap:
+            name: wordpress-setup
+            defaultMode: 0555
+        - name: shared
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi

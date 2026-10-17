@@ -1,3 +1,10 @@
-# Local overrides (k3d). Same host for Phase 0.
+# Local overrides (k3d).
 hello:
   host: hello.127.0.0.1.nip.io
+
+store:
+  enabled: true
+  wordpress:
+    siteUrl: http://shop.127.0.0.1.nip.io
+  ingress:
+    host: shop.127.0.0.1.nip.io

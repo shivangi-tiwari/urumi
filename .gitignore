@@ -23,3 +23,5 @@ dist/
 
 # Helm / k8d
 *.tgz
+
+Copy-Item .\charts\platform\secrets.example.yaml .\charts\platform\secrets.local.yaml

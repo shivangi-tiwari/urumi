@@ -1,0 +1,129 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: wordpress-data
+  labels:
+    {{- include "store.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.wordpress.storage }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wordpress
+  labels:
+    {{- include "store.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: wordpress
+  template:
+    metadata:
+      labels:
+        app: wordpress
+        app.kubernetes.io/name: wordpress
+    spec:
+      securityContext:
+        fsGroup: 33
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: wordpress
+          image: {{ .Values.wordpress.image | quote }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          env:
+            - name: WORDPRESS_DB_HOST
+              value: mariadb:3306
+            - name: WORDPRESS_DB_NAME
+              value: {{ .Values.database.name | quote }}
+            - name: WORDPRESS_DB_USER
+              value: {{ .Values.database.user | quote }}
+            - name: WORDPRESS_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: store-database
+                  key: database-password
+          resources:
+            {{- toYaml .Values.wordpress.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /wp-login.php
+              port: http
+              httpHeaders:
+                - name: Host
+                  value: {{ .Values.ingress.host | quote }}
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /wp-login.php
+              port: http
+              httpHeaders:
+                - name: Host
+                  value: {{ .Values.ingress.host | quote }}
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - CHOWN
+                - DAC_OVERRIDE
+                - SETGID
+                - SETUID
+                - NET_BIND_SERVICE
+          volumeMounts:
+            - name: wordpress-data
+              mountPath: /var/www/html
+      volumes:
+        - name: wordpress-data
+          persistentVolumeClaim:
+            claimName: wordpress-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wordpress
+  labels:
+    {{- include "store.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    app: wordpress
+  ports:
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: http
+      protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: wordpress
+  labels:
+    {{- include "store.labels" . | nindent 4 }}
+spec:
+  rules:
+    - host: {{ .Values.ingress.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: wordpress
+                port:
+                  number: {{ .Values.service.port }}

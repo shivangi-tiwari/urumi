@@ -10,4 +10,5 @@ deploy:
 	helm upgrade --install urumi ./charts/platform \
 		--namespace urumi \
 		--create-namespace \
-		--values ./charts/platform/values-local.yaml
+		--values ./charts/platform/values-local.yaml \
+		--values ./charts/platform/secrets.local.yaml

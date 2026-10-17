@@ -1,6 +1,11 @@
 apiVersion: v2
 name: platform
-description: Urumi MCP Gateway - umbrella chart (Phase 0 hello)
+description: Urumi MCP Gateway - umbrella chart
 type: application
 version: 0.1.0
 appVersion: "0.1.0"
+dependencies:
+  - name: store
+    version: 0.1.0
+    repository: file://charts/store
+    condition: store.enabled
