@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: urumi
+  labels:
+    name: urumi
+    app.kubernetes.io/managed-by: {{ .Release.Service }}

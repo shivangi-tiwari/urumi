@@ -1,0 +1,19 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: hello
+  namespace: urumi
+  labels:
+    app: hello
+spec:
+  rules:
+    - host: {{ .Values.hello.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: hello
+                port:
+                  number: {{ .Values.hello.servicePort }}

@@ -1,0 +1,3 @@
+# Local overrides (k3d). Same host for Phase 0.
+hello:
+  host: hello.127.0.0.1.nip.io

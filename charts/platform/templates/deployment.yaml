@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello
+  namespace: urumi
+  labels:
+    app: hello
+    {{- include "platform.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.hello.replicaCount }}
+  selector:
+    matchLabels:
+      app: hello
+  template:
+    metadata:
+      labels:
+        app: hello
+        {{- include "platform.labels" . | nindent 8 }}
+    spec:
+      # Pod-level security: non-root is enforced here and at container level.
+      # nginx-unprivileged runs as uid 101 (nginx) and listens on 8080.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101
+        fsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: hello
+          image: "{{ .Values.hello.image.repository }}:{{ .Values.hello.image.tag }}"
+          imagePullPolicy: {{ .Values.hello.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.hello.containerPort }}
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.hello.resources | nindent 12 }}
+          # Probes prove the pod is ready to receive traffic and is still alive.
+          # nginx serves / with 200 even with no extra config, so path / is safe.
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 101
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: false

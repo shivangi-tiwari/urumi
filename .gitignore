@@ -1,0 +1,25 @@
+# secrets — real values, never commit
+charts/platform/secrets.local.yaml
+charts/platform/secrets.prod.yaml
+secrets.local.yaml
+secrets.prod.yaml
+**/secrets.local.yaml
+**/secrets.prod.yaml
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*~
+
+# dependencies / build
+node_modules/
+dist/
+.next/
+.env
+.env.local
+
+# Helm / k8d
+*.tgz
