@@ -35,7 +35,7 @@ export const servers = pgTable("servers", {
 export const auditLogs = pgTable("audit_logs", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
-  source: text("source", { enum: ["chat", "mcp"] }).notNull(),
+  source: text("source", { enum: ["chat", "mcp", "admin"] }).notNull(),
   serverSlug: text("server_slug"),
   tool: text("tool"),
   startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),

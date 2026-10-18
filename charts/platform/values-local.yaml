@@ -25,3 +25,8 @@ gateway:
   enabled: true
   auth:
     cookieSecure: false
+
+dashboard:
+  enabled: true
+  ingress:
+    host: app.127.0.0.1.nip.io

@@ -1,0 +1,26 @@
+replicaCount: 1
+
+image:
+  repository: dashboard
+  tag: local
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+
+ingress:
+  enabled: true
+  host: app.example.com
+  className: traefik
+  gatewayService: gateway
+  gatewayPort: 3000
+
+resources:
+  requests:
+    cpu: 25m
+    memory: 32Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi

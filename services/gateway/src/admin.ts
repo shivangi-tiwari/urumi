@@ -1,5 +1,6 @@
 import { and, desc, eq, type SQL } from "drizzle-orm";
 import { Router } from "express";
+import { writeAdminAudit } from "./audit.js";
 import { requireRole, requireSession } from "./auth.js";
 import { db } from "./db/client.js";
 import { apiKeys, auditLogs, servers, users } from "./db/schema.js";
@@ -16,16 +17,27 @@ function publicServer(row: typeof servers.$inferSelect) {
     id: row.id,
     slug: row.slug,
     name: row.name,
-    url: row.url,
+    url: publicUrl(row.url),
     authType: row.authType,
     headerName: row.headerName,
     hasCredential: Boolean(row.credentialEncrypted),
     enabled: row.enabled,
     status: row.status,
-    lastError: row.lastError,
+    lastError: row.lastError?.replace(/(https?:\/\/)[^/@\s]+@/gi, "$1[redacted]@") ?? null,
     lastCheckedAt: row.lastCheckedAt,
     tools: getCachedTools(row.slug).map((tool) => tool.name),
   };
+}
+
+function publicUrl(value: string): string {
+  try {
+    const url = new URL(value);
+    url.username = "";
+    url.password = "";
+    return url.toString();
+  } catch {
+    return "Invalid URL";
+  }
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -40,7 +52,8 @@ function validUrl(value: unknown): value is string {
   if (typeof value !== "string") return false;
   try {
     const url = new URL(value);
-    return url.protocol === "http:" || url.protocol === "https:";
+    return (url.protocol === "http:" || url.protocol === "https:") &&
+      url.username.length === 0 && url.password.length === 0;
   } catch {
     return false;
   }
@@ -109,6 +122,8 @@ adminRouter.post("/servers", requireSession, requireRole("admin"), async (req, r
       res.status(409).json({ error: "A server with that slug already exists." });
       return;
     }
+    const user = res.locals.user as typeof users.$inferSelect;
+    await writeAdminAudit(user.id, "server.create", created.slug);
     res.status(201).json({ server: publicServer(created) });
   } catch {
     res.status(500).json({ error: "Server could not be created." });
@@ -178,6 +193,13 @@ adminRouter.patch("/servers/:id", requireSession, requireRole("admin"), async (r
     if (Object.keys(updates).length) {
       const [saved] = await db.update(servers).set(updates).where(eq(servers.id, id)).returning();
       if (saved) updated = saved;
+
+      const user = res.locals.user as typeof users.$inferSelect;
+      const enabledOnly = Object.keys(body).length === 1 && typeof body.enabled === "boolean";
+      const action = enabledOnly
+        ? body.enabled ? "server.enable" : "server.disable"
+        : "server.update";
+      await writeAdminAudit(user.id, action, existing.slug);
     }
 
     if (connectionChanged || body.enabled === false) await dropClient(existing.slug);
@@ -206,6 +228,8 @@ adminRouter.delete("/servers/:id", requireSession, requireRole("admin"), async (
 
     await dropClient(existing.slug);
     await db.delete(servers).where(eq(servers.id, id));
+    const user = res.locals.user as typeof users.$inferSelect;
+    await writeAdminAudit(user.id, "server.delete", existing.slug);
     res.status(204).end();
   } catch {
     res.status(500).json({ error: "Server could not be deleted." });

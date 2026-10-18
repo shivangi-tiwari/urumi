@@ -1,7 +1,7 @@
 # Default values — override in values-local.yaml / values-prod.yaml
 # Only hello exists in Phase 0; later phases add store, gateway, etc.
 hello:
-  replicaCount: 1
+  replicaCount: 0
   image:
     # nginx-unprivileged runs as non-root (uid 101) and listens on 8080,
     # so the container satisfies the "run as non-root" rule without extra config.
@@ -35,4 +35,7 @@ postgres:
   enabled: false
 
 gateway:
+  enabled: false
+
+dashboard:
   enabled: false

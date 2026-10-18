@@ -2,6 +2,7 @@ import argon2 from "argon2";
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { Router, type Request, type RequestHandler } from "express";
+import { writeAdminAudit } from "./audit.js";
 import { apiKeys, users } from "./db/schema.js";
 import { db } from "./db/client.js";
 
@@ -184,6 +185,7 @@ authRouter.post("/keys", requireSession, requireRole("admin", "member"), async (
       keyHash,
     }).returning({ id: apiKeys.id });
 
+    await writeAdminAudit(user.id, "api_key.create");
     res.status(201).json({ id: created.id, prefix, key });
   } catch {
     res.status(500).json({ error: "API key could not be created." });
@@ -209,6 +211,7 @@ authRouter.delete("/keys/:id", requireSession, async (req, res) => {
 
     if (!key.revokedAt) {
       await db.update(apiKeys).set({ revokedAt: new Date() }).where(eq(apiKeys.id, keyId));
+      await writeAdminAudit(user.id, "api_key.revoke");
     }
     res.status(204).end();
   } catch {
