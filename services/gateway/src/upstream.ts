@@ -24,7 +24,7 @@ function buildHeaders(server: Server): Record<string, string> {
   return {};
 }
 
-async function dropClient(slug: string) {
+export async function dropClient(slug: string) {
   const entry = entries.get(slug);
   entries.delete(slug);
   if (entry) {
