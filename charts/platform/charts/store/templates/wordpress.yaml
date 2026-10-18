@@ -54,6 +54,18 @@ spec:
                   key: database-password
           resources:
             {{- toYaml .Values.wordpress.resources | nindent 12 }}
+          {{ if .Values.wordpress.startupProbe.enabled }}
+          startupProbe:
+            httpGet:
+              path: /wp-login.php
+              port: http
+              httpHeaders:
+                - name: Host
+                  value: {{ .Values.ingress.host | quote }}
+            periodSeconds: {{ .Values.wordpress.startupProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.wordpress.startupProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.wordpress.startupProbe.failureThreshold }}
+          {{ end }}
           readinessProbe:
             httpGet:
               path: /wp-login.php
@@ -61,9 +73,10 @@ spec:
               httpHeaders:
                 - name: Host
                   value: {{ .Values.ingress.host | quote }}
-            initialDelaySeconds: 15
-            periodSeconds: 10
-            timeoutSeconds: 5
+            initialDelaySeconds: {{ .Values.wordpress.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.wordpress.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.wordpress.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.wordpress.readinessProbe.failureThreshold }}
           livenessProbe:
             httpGet:
               path: /wp-login.php
@@ -71,9 +84,10 @@ spec:
               httpHeaders:
                 - name: Host
                   value: {{ .Values.ingress.host | quote }}
-            initialDelaySeconds: 30
-            periodSeconds: 20
-            timeoutSeconds: 5
+            initialDelaySeconds: {{ .Values.wordpress.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.wordpress.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.wordpress.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.wordpress.livenessProbe.failureThreshold }}
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
