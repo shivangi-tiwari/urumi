@@ -8,11 +8,14 @@ dependencies:
 - name: mcp-notes
   repository: file://charts/mcp-notes
   version: 0.1.0
+- name: mcp-everything
+  repository: file://charts/mcp-everything
+  version: 0.1.0
 - name: postgres
   repository: file://charts/postgres
   version: 0.1.0
 - name: gateway
   repository: file://charts/gateway
   version: 0.1.0
-digest: sha256:5e6bed665e48d4945e71a8d3f6717d7f8af6372da2399f21448db9d15e7fae8c
-generated: "2026-10-18T15:59:56.6131588+05:30"
+digest: sha256:76f7a6325a15a8de1487dc146d9a82f007c57df8ec742283ddb0d2dbc42d9fe7
+generated: "2026-10-18T17:34:21.1069888+05:30"

@@ -28,6 +28,9 @@ mcp-woo:
 mcp-notes:
   enabled: false
 
+mcp-everything:
+  enabled: false
+
 postgres:
   enabled: false
 

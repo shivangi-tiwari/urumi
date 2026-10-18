@@ -1,0 +1,39 @@
+replicaCount: 1
+
+image:
+  repository: node
+  tag: 22.12-alpine
+  pullPolicy: IfNotPresent
+
+package:
+  version: 1.0.0
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 3001
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+startupProbe:
+  periodSeconds: 10
+  timeoutSeconds: 2
+  failureThreshold: 30
+
+readinessProbe:
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 2
+  failureThreshold: 3
+
+livenessProbe:
+  initialDelaySeconds: 10
+  periodSeconds: 20
+  timeoutSeconds: 2
+  failureThreshold: 3

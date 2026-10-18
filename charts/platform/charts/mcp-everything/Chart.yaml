@@ -1,0 +1,6 @@
+apiVersion: v2
+name: mcp-everything
+description: Official MCP reference server
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
