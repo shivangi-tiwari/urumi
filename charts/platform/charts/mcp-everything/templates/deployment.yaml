@@ -19,11 +19,6 @@ spec:
         - name: mcp-everything
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: ["npx"]
-          args:
-            - --yes
-            - "@modelcontextprotocol/server-everything@{{ .Values.package.version }}"
-            - streamableHttp
           ports:
             - name: http
               containerPort: {{ .Values.service.targetPort }}
@@ -36,10 +31,6 @@ spec:
               drop:
                 - ALL
           env:
-            - name: HOME
-              value: /tmp
-            - name: NPM_CONFIG_CACHE
-              value: /tmp/npm-cache
             - name: PORT
               value: {{ .Values.service.targetPort | quote }}
           resources:

@@ -1,12 +1,9 @@
 replicaCount: 1
 
 image:
-  repository: node
-  tag: 22.12-alpine
+  repository: mcp-everything
+  tag: local
   pullPolicy: IfNotPresent
-
-package:
-  version: 1.0.0
 
 service:
   type: ClusterIP
