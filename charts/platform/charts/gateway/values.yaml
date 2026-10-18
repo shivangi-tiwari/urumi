@@ -9,6 +9,7 @@ authSecretName: gateway-auth
 adminEmail: ""
 adminPassword: ""
 sessionSecret: ""
+credentialsKey: ""
 auth:
   cookieSecure: true
 

@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -16,4 +16,18 @@ export const apiKeys = pgTable("api_keys", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
   lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+});
+
+export const servers = pgTable("servers", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  slug: text("slug").notNull().unique(),
+  name: text("name").notNull(),
+  url: text("url").notNull(),
+  authType: text("auth_type", { enum: ["none", "bearer", "header"] }).notNull().default("none"),
+  headerName: text("header_name"),
+  credentialEncrypted: text("credential_encrypted"),
+  enabled: boolean("enabled").notNull().default(true),
+  status: text("status", { enum: ["unknown", "connected", "unreachable"] }).notNull().default("unknown"),
+  lastError: text("last_error"),
+  lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
 });
