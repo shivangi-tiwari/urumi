@@ -5,5 +5,8 @@ dependencies:
 - name: mcp-woo
   repository: file://charts/mcp-woo
   version: 0.1.0
-digest: sha256:d8f4ac826a3f1751ad049a653ed3a77d44023514ad2f12bf4725acfb6330c129
-generated: "2026-10-18T10:37:09.7334305+05:30"
+- name: postgres
+  repository: file://charts/postgres
+  version: 0.1.0
+digest: sha256:9016cb78a56b0c208fb2308d8b364b283a88f3fec3ce76869c6702f4c547c04d
+generated: "2026-10-18T10:55:00.8686344+05:30"

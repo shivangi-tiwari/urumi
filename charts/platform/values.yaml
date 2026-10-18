@@ -24,3 +24,6 @@ store:
 
 mcp-woo:
   enabled: false
+
+postgres:
+  enabled: false

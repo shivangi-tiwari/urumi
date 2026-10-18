@@ -1,0 +1,35 @@
+replicaCount: 1
+
+image: postgres:16.4
+
+name: urumi
+user: urumi
+password: ""
+storage: 8Gi
+
+service:
+  port: 5432
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+startupProbe:
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 30
+
+readinessProbe:
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+livenessProbe:
+  initialDelaySeconds: 30
+  periodSeconds: 20
+  timeoutSeconds: 5
+  failureThreshold: 3

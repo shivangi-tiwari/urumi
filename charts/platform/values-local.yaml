@@ -11,3 +11,6 @@ store:
 
 mcp-woo:
   enabled: true
+
+postgres:
+  enabled: true
