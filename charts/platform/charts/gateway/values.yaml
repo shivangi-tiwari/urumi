@@ -1,0 +1,37 @@
+replicaCount: 1
+
+image:
+  repository: gateway
+  tag: local
+  pullPolicy: IfNotPresent
+
+service:
+  port: 3000
+
+database:
+  host: postgres
+  port: 5432
+  name: urumi
+  user: urumi
+  secretName: postgres
+  secretKey: password
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+readinessProbe:
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 2
+  failureThreshold: 3
+
+livenessProbe:
+  initialDelaySeconds: 10
+  periodSeconds: 20
+  timeoutSeconds: 2
+  failureThreshold: 3

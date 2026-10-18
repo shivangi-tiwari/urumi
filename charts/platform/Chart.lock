@@ -8,5 +8,8 @@ dependencies:
 - name: postgres
   repository: file://charts/postgres
   version: 0.1.0
-digest: sha256:9016cb78a56b0c208fb2308d8b364b283a88f3fec3ce76869c6702f4c547c04d
-generated: "2026-10-18T10:55:00.8686344+05:30"
+- name: gateway
+  repository: file://charts/gateway
+  version: 0.1.0
+digest: sha256:ab4015a551794bbeeb19730cb176185fa9dbd4f6b9696855146a4d621da30479
+generated: "2026-10-18T11:37:58.1779429+05:30"

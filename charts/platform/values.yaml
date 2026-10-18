@@ -27,3 +27,6 @@ mcp-woo:
 
 postgres:
   enabled: false
+
+gateway:
+  enabled: false
