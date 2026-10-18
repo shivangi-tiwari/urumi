@@ -1,4 +1,4 @@
-import { boolean, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -30,4 +30,16 @@ export const servers = pgTable("servers", {
   status: text("status", { enum: ["unknown", "connected", "unreachable"] }).notNull().default("unknown"),
   lastError: text("last_error"),
   lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
+});
+
+export const auditLogs = pgTable("audit_logs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+  source: text("source", { enum: ["chat", "mcp"] }).notNull(),
+  serverSlug: text("server_slug"),
+  tool: text("tool"),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+  durationMs: integer("duration_ms").notNull().default(0),
+  outcome: text("outcome", { enum: ["success", "error", "rejected"] }).notNull(),
+  errorMessage: text("error_message"),
 });

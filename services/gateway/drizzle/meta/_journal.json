@@ -16,6 +16,7 @@
       "tag": "0001_create_api_keys",
       "breakpoints": true
     },
-    { "idx": 2, "version": "7", "when": 1760000002000, "tag": "0002_create_servers", "breakpoints": true }
+    { "idx": 2, "version": "7", "when": 1760000002000, "tag": "0002_create_servers", "breakpoints": true },
+    { "idx": 3, "version": "7", "when": 1760000003000, "tag": "0003_create_audit_logs", "breakpoints": true }
   ]
 }
