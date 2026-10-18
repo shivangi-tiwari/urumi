@@ -52,6 +52,11 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.authSecretName }}
                   key: session-secret
+            - name: CREDENTIALS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.authSecretName }}
+                  key: credentials-key
             - name: COOKIE_SECURE
               value: {{ .Values.auth.cookieSecure | quote }}
           resources:
