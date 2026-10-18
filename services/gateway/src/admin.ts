@@ -1,16 +1,19 @@
 import { and, desc, eq, type SQL } from "drizzle-orm";
+import argon2 from "argon2";
 import { Router } from "express";
 import { writeAdminAudit } from "./audit.js";
 import { requireRole, requireSession } from "./auth.js";
 import { db } from "./db/client.js";
 import { apiKeys, auditLogs, servers, users } from "./db/schema.js";
 import { encrypt } from "./crypto.js";
+import { assertSafeServerUrl, UnsafeServerUrlError } from "./ssrf.js";
 import { dropClient, getCachedTools } from "./upstream.js";
 
 export const adminRouter = Router();
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const slugPattern = /^[a-z0-9]+(?:_[a-z0-9]+)*$/;
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function publicServer(row: typeof servers.$inferSelect) {
   return {
@@ -48,6 +51,12 @@ function validName(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0 && value.length <= 100;
 }
 
+function normalizedEmail(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const email = value.trim().toLowerCase();
+  return email.length <= 254 && emailPattern.test(email) ? email : undefined;
+}
+
 function validUrl(value: unknown): value is string {
   if (typeof value !== "string") return false;
   try {
@@ -62,6 +71,54 @@ function validUrl(value: unknown): value is string {
 function validAuthType(value: unknown): value is "none" | "bearer" | "header" {
   return value === "none" || value === "bearer" || value === "header";
 }
+
+adminRouter.get("/members", requireSession, requireRole("admin"), async (_req, res) => {
+  try {
+    const members = await db.select({
+      id: users.id,
+      email: users.email,
+      role: users.role,
+      createdAt: users.createdAt,
+    }).from(users).where(eq(users.role, "member")).orderBy(users.createdAt);
+    res.json({ members });
+  } catch {
+    res.status(500).json({ error: "Members could not be loaded." });
+  }
+});
+
+adminRouter.post("/members", requireSession, requireRole("admin"), async (req, res) => {
+  const email = normalizedEmail(req.body?.email);
+  const password = req.body?.password;
+  if (!email) {
+    res.status(400).json({ error: "A valid email address is required." });
+    return;
+  }
+  if (typeof password !== "string" || password.length < 12 || password.length > 128) {
+    res.status(400).json({ error: "Password must be between 12 and 128 characters." });
+    return;
+  }
+
+  try {
+    const passwordHash = await argon2.hash(password);
+    const [member] = await db.insert(users).values({
+      email,
+      passwordHash,
+      role: "member",
+    }).onConflictDoNothing({ target: users.email }).returning({
+      id: users.id,
+      email: users.email,
+      role: users.role,
+      createdAt: users.createdAt,
+    });
+    if (!member) {
+      res.status(409).json({ error: "A user with that email already exists." });
+      return;
+    }
+    res.status(201).json({ member });
+  } catch {
+    res.status(500).json({ error: "Member could not be created." });
+  }
+});
 
 adminRouter.get("/servers", requireSession, requireRole("admin"), async (_req, res) => {
   try {
@@ -90,6 +147,15 @@ adminRouter.post("/servers", requireSession, requireRole("admin"), async (req, r
     if (!validUrl(body.url)) {
       res.status(400).json({ error: "URL must be a valid HTTP or HTTPS URL." });
       return;
+    }
+    try {
+      await assertSafeServerUrl(body.url);
+    } catch (err) {
+      if (err instanceof UnsafeServerUrlError) {
+        res.status(400).json({ error: err.message });
+        return;
+      }
+      throw err;
     }
     if (!validAuthType(body.authType)) {
       res.status(400).json({ error: "Auth type must be none, bearer, or header." });
@@ -171,6 +237,15 @@ adminRouter.patch("/servers/:id", requireSession, requireRole("admin"), async (r
       if (!validUrl(body.url)) {
         res.status(400).json({ error: "URL must be a valid HTTP or HTTPS URL." });
         return;
+      }
+      try {
+        await assertSafeServerUrl(body.url);
+      } catch (err) {
+        if (err instanceof UnsafeServerUrlError) {
+          res.status(400).json({ error: err.message });
+          return;
+        }
+        throw err;
       }
       updates.url = body.url;
       connectionChanged = true;

@@ -59,6 +59,8 @@ spec:
                   key: credentials-key
             - name: COOKIE_SECURE
               value: {{ .Values.auth.cookieSecure | quote }}
+            - name: SSRF_ALLOWED_HOSTS
+              value: {{ .Values.ssrfAllowedHosts | quote }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           readinessProbe:

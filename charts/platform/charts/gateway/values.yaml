@@ -13,6 +13,8 @@ credentialsKey: ""
 auth:
   cookieSecure: true
 
+ssrfAllowedHosts: "mcp-woo,mcp-notes,mcp-everything"
+
 service:
   port: 3000
 

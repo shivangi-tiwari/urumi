@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { db } from "./db/client.js";
 import { servers } from "./db/schema.js";
 import { decrypt } from "./crypto.js";
+import { assertSafeServerUrl } from "./ssrf.js";
 
 type Server = typeof servers.$inferSelect;
 type Tool = Awaited<ReturnType<Client["listTools"]>>["tools"][number];
@@ -40,6 +41,7 @@ async function checkOne(server: Server) {
   let error: string | null = null;
   let created: Client | undefined;
   try {
+    await assertSafeServerUrl(server.url);
     let entry = entries.get(server.slug);
     if (!entry) {
       created = new Client({ name: "urumi-gateway", version: "1.0.0" });

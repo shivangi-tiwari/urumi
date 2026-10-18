@@ -24,6 +24,12 @@ type ApiKey = {
   lastUsedAt: string | null;
   userEmail: string;
 };
+type Member = {
+  id: string;
+  email: string;
+  role: "member";
+  createdAt: string;
+};
 type AuditEntry = {
   id: string;
   userEmail: string | null;
@@ -35,7 +41,7 @@ type AuditEntry = {
   outcome: "success" | "error" | "rejected";
   errorMessage: string | null;
 };
-type Page = "servers" | "keys" | "audit";
+type Page = "servers" | "members" | "keys" | "audit";
 
 async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(path, {
@@ -361,6 +367,66 @@ function AuditPage() {
   </section>;
 }
 
+function MembersPage() {
+  const [members, setMembers] = useState<Member[]>([]);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const refresh = useCallback(async () => {
+    try {
+      const result = await api<{ members: Member[] }>("/api/members");
+      setMembers(result.members);
+      setError("");
+    } catch (err) {
+      setError(messageOf(err));
+    }
+  }, []);
+
+  useEffect(() => { void refresh(); }, [refresh]);
+
+  async function createMember(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await api("/api/members", {
+        method: "POST",
+        body: JSON.stringify({ email, password }),
+      });
+      setEmail("");
+      setPassword("");
+      setNotice("Member created. Share their sign-in details securely.");
+      await refresh();
+    } catch (err) {
+      setError(messageOf(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return <section className="page">
+    <div className="page-heading">
+      <div><p className="eyebrow">TEAM</p><h1>Members</h1><p className="muted">Create accounts with the member role.</p></div>
+    </div>
+    {error && <div className="alert error">{error}</div>}
+    {notice && <div className="alert success">{notice}</div>}
+    <form className="panel form-grid" onSubmit={createMember}>
+      <h2 className="wide">Add a member</h2>
+      <label>Email address<input type="email" autoComplete="off" value={email} onChange={(event) => setEmail(event.target.value)} required maxLength={254} /></label>
+      <label>Password<input type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={12} maxLength={128} /></label>
+      <div className="wide"><button className="primary" disabled={busy}>{busy ? "Creating..." : "Create member"}</button></div>
+    </form>
+    <div className="panel table-wrap"><table><thead><tr><th>Email</th><th>Role</th><th>Created</th></tr></thead>
+      <tbody>{members.map((member) => <tr key={member.id}><td>{member.email}</td><td><span className="badge">member</span></td><td>{date(member.createdAt)}</td></tr>)}</tbody></table>
+      {!members.length && !error && <p className="empty">No members yet.</p>}
+    </div>
+  </section>;
+}
+
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [page, setPage] = useState<Page>("servers");
@@ -389,6 +455,7 @@ export default function App() {
 
   const nav: Array<{ id: Page; label: string; adminOnly?: boolean }> = [
     { id: "servers", label: "Servers", adminOnly: true },
+    { id: "members", label: "Members", adminOnly: true },
     { id: "keys", label: "API keys" },
     { id: "audit", label: "Audit log", adminOnly: true },
   ];
@@ -405,6 +472,7 @@ export default function App() {
     <main className="main-content">
       {error && <div className="alert error">{error}</div>}
       {currentPage === "servers" && user.role === "admin" && <ServersPage />}
+      {currentPage === "members" && user.role === "admin" && <MembersPage />}
       {currentPage === "keys" && <KeysPage user={user} />}
       {currentPage === "audit" && user.role === "admin" && <AuditPage />}
     </main>
