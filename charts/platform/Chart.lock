@@ -2,5 +2,8 @@ dependencies:
 - name: store
   repository: file://charts/store
   version: 0.1.0
-digest: sha256:61448fab9f2aa161589b4b17032db21a88900423d23e171892acbbd923cf2222
-generated: "2026-10-17T23:54:33.2553196+05:30"
+- name: mcp-woo
+  repository: file://charts/mcp-woo
+  version: 0.1.0
+digest: sha256:d8f4ac826a3f1751ad049a653ed3a77d44023514ad2f12bf4725acfb6330c129
+generated: "2026-10-18T10:37:09.7334305+05:30"

@@ -21,3 +21,6 @@ hello:
 
 store:
   enabled: false
+
+mcp-woo:
+  enabled: false

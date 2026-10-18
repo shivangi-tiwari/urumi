@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-woo
+  labels:
+    app: mcp-woo
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    app: mcp-woo
+  ports:
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: http
+      protocol: TCP

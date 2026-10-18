@@ -8,3 +8,6 @@ store:
     siteUrl: http://shop.127.0.0.1.nip.io
   ingress:
     host: shop.127.0.0.1.nip.io
+
+mcp-woo:
+  enabled: true

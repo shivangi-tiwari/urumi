@@ -9,3 +9,7 @@ dependencies:
     version: 0.1.0
     repository: file://charts/store
     condition: store.enabled
+  - name: mcp-woo
+    version: 0.1.0
+    repository: file://charts/mcp-woo
+    condition: mcp-woo.enabled
