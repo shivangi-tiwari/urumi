@@ -13,6 +13,10 @@ dependencies:
     version: 0.1.0
     repository: file://charts/mcp-woo
     condition: mcp-woo.enabled
+  - name: mcp-notes
+    version: 0.1.0
+    repository: file://charts/mcp-notes
+    condition: mcp-notes.enabled
   - name: postgres
     version: 0.1.0
     repository: file://charts/postgres

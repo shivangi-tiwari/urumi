@@ -12,6 +12,9 @@ store:
 mcp-woo:
   enabled: true
 
+mcp-notes:
+  enabled: true
+
 postgres:
   enabled: true
 

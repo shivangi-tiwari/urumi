@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-notes
+  labels:
+    app: mcp-notes
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    app: mcp-notes
+  ports:
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: http
+      protocol: TCP
