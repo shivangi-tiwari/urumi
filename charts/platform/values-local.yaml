@@ -17,3 +17,5 @@ postgres:
 
 gateway:
   enabled: true
+  auth:
+    cookieSecure: false

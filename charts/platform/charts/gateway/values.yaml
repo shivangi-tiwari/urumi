@@ -5,6 +5,13 @@ image:
   tag: local
   pullPolicy: IfNotPresent
 
+authSecretName: gateway-auth
+adminEmail: ""
+adminPassword: ""
+sessionSecret: ""
+auth:
+  cookieSecure: true
+
 service:
   port: 3000
 

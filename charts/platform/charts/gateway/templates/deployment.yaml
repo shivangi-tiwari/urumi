@@ -37,6 +37,23 @@ spec:
                   key: {{ .Values.database.secretKey }}
             - name: DATABASE_URL
               value: "postgresql://{{ .Values.database.user }}:$(POSTGRES_PASSWORD)@{{ .Values.database.host }}:{{ .Values.database.port }}/{{ .Values.database.name }}"
+            - name: ADMIN_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.authSecretName }}
+                  key: admin-email
+            - name: ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.authSecretName }}
+                  key: admin-password
+            - name: SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.authSecretName }}
+                  key: session-secret
+            - name: COOKIE_SECURE
+              value: {{ .Values.auth.cookieSecure | quote }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           readinessProbe:

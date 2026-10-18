@@ -1,0 +1,43 @@
+warning: in the working copy of 'charts/platform/charts/gateway/values.yaml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'charts/platform/secrets.example.yaml', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'charts/platform/values-local.yaml', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/charts/platform/charts/gateway/values.yaml b/charts/platform/charts/gateway/values.yaml[m
+[1mindex 7886a4c..781cdf0 100644[m
+[1m--- a/charts/platform/charts/gateway/values.yaml[m
+[1m+++ b/charts/platform/charts/gateway/values.yaml[m
+[36m@@ -5,6 +5,13 @@[m [mimage:[m
+   tag: local[m
+   pullPolicy: IfNotPresent[m
+ [m
+[32m+[m[32mauthSecretName: gateway-auth[m
+[32m+[m[32madminEmail: ""[m
+[32m+[m[32madminPassword: ""[m
+[32m+[m[32msessionSecret: ""[m
+[32m+[m[32mauth:[m
+[32m+[m[32m  cookieSecure: true[m
+[32m+[m
+ service:[m
+   port: 3000[m
+ [m
+[1mdiff --git a/charts/platform/secrets.example.yaml b/charts/platform/secrets.example.yaml[m
+[1mindex 4c3ddb0..6813f68 100644[m
+[1m--- a/charts/platform/secrets.example.yaml[m
+[1m+++ b/charts/platform/secrets.example.yaml[m
+[36m@@ -8,3 +8,7 @@[m [mstore:[m
+     adminPassword: CHANGE_ME[m
+ postgres:[m
+   password: CHANGE_ME[m
+[32m+[m[32mgateway:[m
+[32m+[m[32m  adminEmail: admin@example.com[m
+[32m+[m[32m  adminPassword: CHANGE_ME[m
+[32m+[m[32m  sessionSecret: CHANGE_ME[m
+[1mdiff --git a/charts/platform/values-local.yaml b/charts/platform/values-local.yaml[m
+[1mindex 2796e56..4f294d1 100644[m
+[1m--- a/charts/platform/values-local.yaml[m
+[1m+++ b/charts/platform/values-local.yaml[m
+[36m@@ -17,3 +17,5 @@[m [mpostgres:[m
+ [m
+ gateway:[m
+   enabled: true[m
+[32m+[m[32m  auth:[m
+[32m+[m[32m    cookieSecure: false[m
