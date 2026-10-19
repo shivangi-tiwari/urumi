@@ -39,7 +39,7 @@ type AuthResult =
   | { ok: false; userId: string | null; actorEmail: string | null; source: "chat" | "mcp"; error: string };
 
 async function authenticate(req: Request): Promise<AuthResult> {
-  const match = /^Bearer (urk_[0-9a-f]+)$/.exec(req.headers.authorization ?? "");
+  const match = /^Bearer\s+(\S+)$/i.exec(req.headers.authorization ?? "");
   if (!match) {
     return {
       ok: false,

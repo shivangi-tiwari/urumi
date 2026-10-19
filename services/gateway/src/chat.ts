@@ -211,7 +211,8 @@ chatRouter.post("/chat", requireSession, async (req: Request, res: Response) => 
       toolCalls,
     });
   } catch (err) {
-    console.error("chat request failed:", err instanceof Error ? err.name : "unknown error");
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    console.error("chat request failed:", redactSensitiveText(errorMessage, jwt));
     res.status(502).json({ error: "The chat request could not be completed." });
   } finally {
     try {
