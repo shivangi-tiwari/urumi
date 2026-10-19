@@ -185,7 +185,7 @@ authRouter.post("/keys", requireSession, requireRole("admin", "member"), async (
       keyHash,
     }).returning({ id: apiKeys.id });
 
-    await writeAdminAudit(user.id, "api_key.create");
+    await writeAdminAudit(user.id, "api_key.create", { actorEmail: user.email });
     res.status(201).json({ id: created.id, prefix, key });
   } catch {
     res.status(500).json({ error: "API key could not be created." });
@@ -211,7 +211,7 @@ authRouter.delete("/keys/:id", requireSession, async (req, res) => {
 
     if (!key.revokedAt) {
       await db.update(apiKeys).set({ revokedAt: new Date() }).where(eq(apiKeys.id, keyId));
-      await writeAdminAudit(user.id, "api_key.revoke");
+      await writeAdminAudit(user.id, "api_key.revoke", { actorEmail: user.email });
     }
     res.status(204).end();
   } catch {

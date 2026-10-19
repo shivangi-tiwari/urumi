@@ -36,6 +36,7 @@ type AuditEntry = {
   source: "chat" | "mcp" | "admin";
   serverSlug: string | null;
   tool: string | null;
+  detail: string | null;
   startedAt: string;
   durationMs: number;
   outcome: "success" | "error" | "rejected";
@@ -360,8 +361,8 @@ function AuditPage() {
     <div className="page-heading"><div><p className="eyebrow">ACTIVITY</p><h1>Audit log</h1><p className="muted">Latest 100 tool calls and server/API-key admin actions. Refreshes every 15 seconds.</p></div><button className="secondary" onClick={() => void refresh()}>Refresh now</button></div>
     {error && <div className="alert error">{error}</div>}
     <div className="filters"><label>Server<input value={server} onChange={(event) => setServer(event.target.value)} placeholder="All servers" /></label><label>Outcome<select value={outcome} onChange={(event) => setOutcome(event.target.value)}><option value="">All outcomes</option><option value="success">Success</option><option value="error">Error</option><option value="rejected">Rejected</option></select></label></div>
-    <div className="panel table-wrap"><table><thead><tr><th>Time</th><th>User</th><th>Source</th><th>Server / tool</th><th>Duration</th><th>Outcome</th><th>Error</th></tr></thead>
-      <tbody>{entries.map((entry) => <tr key={entry.id}><td>{date(entry.startedAt)}</td><td>{entry.userEmail ?? "Unknown"}</td><td>{entry.source}</td><td>{entry.serverSlug ?? (entry.source === "admin" ? "Admin action" : "—")} / {entry.tool ?? "—"}</td><td>{entry.durationMs} ms</td><td><span className={`badge ${entry.outcome}`}>{entry.outcome}</span></td><td className="error-cell">{entry.errorMessage ?? "—"}</td></tr>)}</tbody></table>
+    <div className="panel table-wrap"><table><thead><tr><th>Time</th><th>User</th><th>Source</th><th>Server / tool</th><th>Detail</th><th>Duration</th><th>Outcome</th><th>Error</th></tr></thead>
+      <tbody>{entries.map((entry) => <tr key={entry.id}><td>{date(entry.startedAt)}</td><td>{entry.userEmail ?? "Unknown"}</td><td>{entry.source}</td><td>{entry.serverSlug ?? (entry.source === "admin" ? "Admin action" : "—")} / {entry.tool ?? "—"}</td><td>{entry.detail ?? "—"}</td><td>{entry.durationMs} ms</td><td><span className={`badge ${entry.outcome}`}>{entry.outcome}</span></td><td className="error-cell">{entry.errorMessage ?? "—"}</td></tr>)}</tbody></table>
       {!entries.length && !error && <p className="empty">No audit events match these filters.</p>}
     </div>
   </section>;
@@ -374,6 +375,7 @@ function MembersPage() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  const [removingId, setRemovingId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -408,6 +410,22 @@ function MembersPage() {
     }
   }
 
+  async function removeMember(member: Member) {
+    if (!window.confirm(`Remove ${member.email}? Their API keys will be revoked and their audit history retained.`)) return;
+    setRemovingId(member.id);
+    setError("");
+    setNotice("");
+    try {
+      await api(`/api/members/${member.id}`, { method: "DELETE" });
+      setNotice(`${member.email} was removed.`);
+      await refresh();
+    } catch (err) {
+      setError(messageOf(err));
+    } finally {
+      setRemovingId(null);
+    }
+  }
+
   return <section className="page">
     <div className="page-heading">
       <div><p className="eyebrow">TEAM</p><h1>Members</h1><p className="muted">Create accounts with the member role.</p></div>
@@ -420,8 +438,8 @@ function MembersPage() {
       <label>Password<input type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={12} maxLength={128} /></label>
       <div className="wide"><button className="primary" disabled={busy}>{busy ? "Creating..." : "Create member"}</button></div>
     </form>
-    <div className="panel table-wrap"><table><thead><tr><th>Email</th><th>Role</th><th>Created</th></tr></thead>
-      <tbody>{members.map((member) => <tr key={member.id}><td>{member.email}</td><td><span className="badge">member</span></td><td>{date(member.createdAt)}</td></tr>)}</tbody></table>
+    <div className="panel table-wrap"><table><thead><tr><th>Email</th><th>Role</th><th>Created</th><th></th></tr></thead>
+      <tbody>{members.map((member) => <tr key={member.id}><td>{member.email}</td><td><span className="badge">member</span></td><td>{date(member.createdAt)}</td><td><button className="danger" disabled={removingId === member.id} onClick={() => void removeMember(member)}>{removingId === member.id ? "Removing..." : "Remove"}</button></td></tr>)}</tbody></table>
       {!members.length && !error && <p className="empty">No members yet.</p>}
     </div>
   </section>;

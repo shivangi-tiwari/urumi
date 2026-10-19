@@ -1,6 +1,7 @@
 import express from "express";
 import { authRouter, seedFirstAdmin } from "./auth.js";
 import { adminRouter } from "./admin.js";
+import { chatRouter } from "./chat.js";
 import { handleMcp } from "./mcp.js";
 import { runMigrations } from "./db/migrate.js";
 import { seedWooServer, startUpstreamManager } from "./upstream.js";
@@ -16,6 +17,7 @@ const port = Number(process.env.PORT ?? 3000);
 app.use(express.json({ limit: "16kb" }));
 app.use("/api", authRouter);
 app.use("/api", adminRouter);
+app.use("/api", chatRouter);
 app.post("/mcp", handleMcp);
 app.all("/mcp", (_req, res) => {
   res.status(405).json({ error: "Use POST." });

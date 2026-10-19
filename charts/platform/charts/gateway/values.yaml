@@ -15,6 +15,13 @@ auth:
 
 ssrfAllowedHosts: "mcp-woo,mcp-notes,mcp-everything"
 
+chatJwtSecret: ""
+llmApiKey: ""
+chat:
+  baseURL: https://api.openai.com/v1
+  model: gpt-4o-mini
+  mcpUrl: http://gateway:3000/mcp
+
 service:
   port: 3000
 

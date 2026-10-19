@@ -8,19 +8,31 @@ export type AdminAuditAction =
   | "server.update"
   | "server.enable"
   | "server.disable"
-  | "server.delete";
+  | "server.delete"
+  | "member.create"
+  | "member.delete";
 
 export async function writeAdminAudit(
   userId: string,
   action: AdminAuditAction,
-  serverSlug: string | null = null,
+  {
+    actorEmail,
+    serverSlug = null,
+    detail = null,
+  }: {
+    actorEmail: string;
+    serverSlug?: string | null;
+    detail?: string | null;
+  },
 ) {
   try {
     await db.insert(auditLogs).values({
       userId,
+      actorEmail,
       source: "admin",
       serverSlug,
       tool: action,
+      detail,
       startedAt: new Date(),
       durationMs: 0,
       outcome: "success",

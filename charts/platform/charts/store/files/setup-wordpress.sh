@@ -29,13 +29,21 @@ wp option update home "$SITE_URL"
 wp option update timezone_string Asia/Kolkata
 wp rewrite structure '/%postname%/' --hard
 
-if ! wp plugin is-installed woocommerce; then
-  wp plugin install woocommerce --version="$WOOCOMMERCE_VERSION" --activate
-elif [ "$(wp plugin get woocommerce --field=version --format=bare)" != "$WOOCOMMERCE_VERSION" ]; then
-  wp plugin install woocommerce --version="$WOOCOMMERCE_VERSION" --activate --force
-elif ! wp plugin is-active woocommerce; then
-  wp plugin activate woocommerce
+woocommerce_plugin_file="wp-content/plugins/woocommerce/woocommerce.php"
+woocommerce_file_version=""
+if [ -f "$woocommerce_plugin_file" ]; then
+  woocommerce_file_version="$(awk -F: '/^[[:space:]]*\*[[:space:]]*Version:/ { gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); print $2; exit }' "$woocommerce_plugin_file")"
 fi
+
+if [ ! -f "$woocommerce_plugin_file" ] || [ "$woocommerce_file_version" != "$WOOCOMMERCE_VERSION" ]; then
+  echo "WooCommerce files are missing or do not match version $WOOCOMMERCE_VERSION; installing pinned version."
+  wp plugin install woocommerce --version="$WOOCOMMERCE_VERSION" --force --activate
+else
+  echo "WooCommerce files match pinned version $WOOCOMMERCE_VERSION; skipping install."
+fi
+
+echo "Activating WooCommerce plugin."
+wp plugin activate woocommerce
 
 wp eval-file /scripts/setup-commerce.php
 mkdir -p /var/www/html/wp-content/mu-plugins

@@ -35,9 +35,11 @@ export const servers = pgTable("servers", {
 export const auditLogs = pgTable("audit_logs", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+  actorEmail: text("actor_email"),
   source: text("source", { enum: ["chat", "mcp", "admin"] }).notNull(),
   serverSlug: text("server_slug"),
   tool: text("tool"),
+  detail: text("detail"),
   startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
   durationMs: integer("duration_ms").notNull().default(0),
   outcome: text("outcome", { enum: ["success", "error", "rejected"] }).notNull(),

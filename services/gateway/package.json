@@ -15,6 +15,7 @@
     "argon2": "^0.41.1",
     "drizzle-orm": "^0.44.7",
     "express": "^4.21.2",
+    "openai": "7.38.0",
     "pg": "^8.16.3"
   },
   "devDependencies": {

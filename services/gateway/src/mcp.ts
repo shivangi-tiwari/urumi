@@ -4,8 +4,9 @@ import type { Request, Response } from "express";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import { verifyChatJwt } from "./chat-jwt.js";
 import { db } from "./db/client.js";
-import { apiKeys, auditLogs, servers } from "./db/schema.js";
+import { apiKeys, auditLogs, servers, users } from "./db/schema.js";
 import { getCachedTools, getClient } from "./upstream.js";
 
 const callTimeoutMs = 20_000;
@@ -15,6 +16,8 @@ type Outcome = "success" | "error" | "rejected";
 
 type AuditEntry = {
   userId: string | null;
+  actorEmail: string | null;
+  source: "chat" | "mcp";
   serverSlug: string | null;
   tool: string | null;
   startedAt: Date;
@@ -25,30 +28,79 @@ type AuditEntry = {
 
 async function writeAudit(entry: AuditEntry) {
   try {
-    await db.insert(auditLogs).values({ source: "mcp", ...entry });
+    await db.insert(auditLogs).values(entry);
   } catch (err) {
     console.error("audit write failed:", err);
   }
 }
 
 type AuthResult =
-  | { ok: true; userId: string }
-  | { ok: false; userId: string | null; error: string };
+  | { ok: true; userId: string; actorEmail: string; source: "chat" | "mcp" }
+  | { ok: false; userId: string | null; actorEmail: string | null; source: "chat" | "mcp"; error: string };
 
 async function authenticate(req: Request): Promise<AuthResult> {
   const match = /^Bearer (urk_[0-9a-f]+)$/.exec(req.headers.authorization ?? "");
-  if (!match) return { ok: false, userId: null, error: "Missing or malformed API key." };
+  if (!match) {
+    return {
+      ok: false,
+      userId: null,
+      actorEmail: null,
+      source: "mcp",
+      error: "Missing or malformed bearer token.",
+    };
+  }
 
-  const keyHash = createHash("sha256").update(match[1]).digest("hex");
+  const token = match[1];
+  if (!token.startsWith("urk_")) {
+    const userId = verifyChatJwt(token);
+    if (!userId) {
+      return {
+        ok: false,
+        userId: null,
+        actorEmail: null,
+        source: "chat",
+        error: "Invalid or expired chat token.",
+      };
+    }
+
+    const [chatUser] = await db.select({ email: users.email }).from(users).where(eq(users.id, userId)).limit(1);
+    if (!chatUser) {
+      return {
+        ok: false,
+        userId: null,
+        actorEmail: null,
+        source: "chat",
+        error: "Invalid or expired chat token.",
+      };
+    }
+    return { ok: true, userId, actorEmail: chatUser.email, source: "chat" };
+  }
+
+  const keyHash = createHash("sha256").update(token).digest("hex");
   const [key] = await db.select().from(apiKeys).where(eq(apiKeys.keyHash, keyHash)).limit(1);
-  if (!key) return { ok: false, userId: null, error: "Unknown API key." };
-  if (key.revokedAt) return { ok: false, userId: key.userId, error: "API key has been revoked." };
+  if (!key) {
+    return { ok: false, userId: null, actorEmail: null, source: "mcp", error: "Unknown API key." };
+  }
+
+  const [user] = await db.select({ email: users.email }).from(users).where(eq(users.id, key.userId)).limit(1);
+  if (!user) {
+    return { ok: false, userId: null, actorEmail: null, source: "mcp", error: "Unknown API key." };
+  }
+  if (key.revokedAt) {
+    return {
+      ok: false,
+      userId: key.userId,
+      actorEmail: user.email,
+      source: "mcp",
+      error: "API key has been revoked.",
+    };
+  }
 
   await db.update(apiKeys).set({ lastUsedAt: new Date() }).where(eq(apiKeys.id, key.id));
-  return { ok: true, userId: key.userId };
+  return { ok: true, userId: key.userId, actorEmail: user.email, source: "mcp" };
 }
 
-function buildServer(userId: string) {
+function buildServer(userId: string, actorEmail: string, source: "chat" | "mcp") {
   const server = new Server(
     { name: "urumi-gateway", version: "1.0.0" },
     { capabilities: { tools: {} } },
@@ -117,6 +169,8 @@ function buildServer(userId: string) {
     } finally {
       await writeAudit({
         userId,
+        actorEmail,
+        source,
         serverSlug: slug,
         tool: slug ? tool : fullName,
         startedAt,
@@ -136,6 +190,8 @@ export async function handleMcp(req: Request, res: Response) {
     if (!auth.ok) {
       await writeAudit({
         userId: auth.userId,
+        actorEmail: auth.actorEmail,
+        source: auth.source,
         serverSlug: null,
         tool: null,
         startedAt: new Date(),
@@ -147,7 +203,7 @@ export async function handleMcp(req: Request, res: Response) {
       return;
     }
 
-    const server = buildServer(auth.userId);
+    const server = buildServer(auth.userId, auth.actorEmail, auth.source);
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     res.on("close", () => {
       void transport.close();
@@ -156,7 +212,7 @@ export async function handleMcp(req: Request, res: Response) {
     await server.connect(transport);
     await transport.handleRequest(req, res, req.body);
   } catch (err) {
-    console.error("mcp request failed:", err);
+    console.error("mcp request failed:", err instanceof Error ? err.name : "unknown error");
     if (!res.headersSent) {
       res.status(500).json({ jsonrpc: "2.0", error: { code: -32603, message: "Internal error." }, id: null });
     }

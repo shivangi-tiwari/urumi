@@ -57,6 +57,22 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.authSecretName }}
                   key: credentials-key
+            - name: CHAT_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.authSecretName }}
+                  key: chat-jwt-secret
+            - name: LLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.authSecretName }}
+                  key: llm-api-key
+            - name: LLM_BASE_URL
+              value: {{ .Values.chat.baseURL | quote }}
+            - name: LLM_MODEL
+              value: {{ .Values.chat.model | quote }}
+            - name: GATEWAY_MCP_URL
+              value: {{ .Values.chat.mcpUrl | quote }}
             - name: COOKIE_SECURE
               value: {{ .Values.auth.cookieSecure | quote }}
             - name: SSRF_ALLOWED_HOSTS

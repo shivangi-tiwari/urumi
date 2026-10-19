@@ -1,4 +1,4 @@
-import { and, desc, eq, type SQL } from "drizzle-orm";
+import { and, desc, eq, isNull, sql, type SQL } from "drizzle-orm";
 import argon2 from "argon2";
 import { Router } from "express";
 import { writeAdminAudit } from "./audit.js";
@@ -114,9 +114,63 @@ adminRouter.post("/members", requireSession, requireRole("admin"), async (req, r
       res.status(409).json({ error: "A user with that email already exists." });
       return;
     }
+    const admin = res.locals.user as typeof users.$inferSelect;
+    await writeAdminAudit(admin.id, "member.create", {
+      actorEmail: admin.email,
+      detail: member.email,
+    });
     res.status(201).json({ member });
   } catch {
     res.status(500).json({ error: "Member could not be created." });
+  }
+});
+
+adminRouter.delete("/members/:id", requireSession, requireRole("admin"), async (req, res) => {
+  const memberId = String(req.params.id);
+  if (!uuidPattern.test(memberId)) {
+    res.status(404).json({ error: "Member not found." });
+    return;
+  }
+
+  const admin = res.locals.user as typeof users.$inferSelect;
+  if (memberId === admin.id) {
+    res.status(403).json({ error: "You cannot remove your own account." });
+    return;
+  }
+
+  try {
+    const result = await db.transaction(async (tx) => {
+      const [member] = await tx.select({
+        id: users.id,
+        email: users.email,
+        role: users.role,
+      }).from(users).where(eq(users.id, memberId)).for("update").limit(1);
+      if (!member) return { status: "missing" as const };
+      if (member.role !== "member") return { status: "admin" as const };
+
+      await tx.update(apiKeys)
+        .set({ revokedAt: new Date() })
+        .where(and(eq(apiKeys.userId, member.id), isNull(apiKeys.revokedAt)));
+      await tx.delete(users).where(eq(users.id, member.id));
+      return { status: "deleted" as const, email: member.email };
+    });
+
+    if (result.status === "missing") {
+      res.status(404).json({ error: "Member not found." });
+      return;
+    }
+    if (result.status === "admin") {
+      res.status(403).json({ error: "Administrator accounts cannot be removed." });
+      return;
+    }
+
+    await writeAdminAudit(admin.id, "member.delete", {
+      actorEmail: admin.email,
+      detail: result.email,
+    });
+    res.status(204).end();
+  } catch {
+    res.status(500).json({ error: "Member could not be removed." });
   }
 });
 
@@ -189,7 +243,7 @@ adminRouter.post("/servers", requireSession, requireRole("admin"), async (req, r
       return;
     }
     const user = res.locals.user as typeof users.$inferSelect;
-    await writeAdminAudit(user.id, "server.create", created.slug);
+    await writeAdminAudit(user.id, "server.create", { actorEmail: user.email, serverSlug: created.slug });
     res.status(201).json({ server: publicServer(created) });
   } catch {
     res.status(500).json({ error: "Server could not be created." });
@@ -274,7 +328,7 @@ adminRouter.patch("/servers/:id", requireSession, requireRole("admin"), async (r
       const action = enabledOnly
         ? body.enabled ? "server.enable" : "server.disable"
         : "server.update";
-      await writeAdminAudit(user.id, action, existing.slug);
+      await writeAdminAudit(user.id, action, { actorEmail: user.email, serverSlug: existing.slug });
     }
 
     if (connectionChanged || body.enabled === false) await dropClient(existing.slug);
@@ -304,7 +358,7 @@ adminRouter.delete("/servers/:id", requireSession, requireRole("admin"), async (
     await dropClient(existing.slug);
     await db.delete(servers).where(eq(servers.id, id));
     const user = res.locals.user as typeof users.$inferSelect;
-    await writeAdminAudit(user.id, "server.delete", existing.slug);
+    await writeAdminAudit(user.id, "server.delete", { actorEmail: user.email, serverSlug: existing.slug });
     res.status(204).end();
   } catch {
     res.status(500).json({ error: "Server could not be deleted." });
@@ -372,10 +426,11 @@ adminRouter.get("/audit", requireSession, requireRole("admin"), async (req, res)
 
     const entries = await db.select({
       id: auditLogs.id,
-      userEmail: users.email,
+      userEmail: sql<string | null>`COALESCE(${auditLogs.actorEmail}, ${users.email})`,
       source: auditLogs.source,
       serverSlug: auditLogs.serverSlug,
       tool: auditLogs.tool,
+      detail: auditLogs.detail,
       startedAt: auditLogs.startedAt,
       durationMs: auditLogs.durationMs,
       outcome: auditLogs.outcome,
