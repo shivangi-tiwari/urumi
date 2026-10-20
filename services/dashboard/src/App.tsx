@@ -15,6 +15,17 @@ type Server = {
   lastCheckedAt: string | null;
   tools: string[];
 };
+type ServerMetrics = {
+  serverSlug: string;
+  status: "unknown" | "connected" | "unreachable";
+  lastError: string | null;
+  totalCalls: number;
+  errors: number;
+  rejectedCount: number;
+  errorRate: number;
+  averageDurationMs: number;
+  p95DurationMs: number;
+};
 type ApiKey = {
   id: string;
   prefix: string;
@@ -208,8 +219,28 @@ function Login({ onLogin }: { onLogin: (user: User) => void }) {
   );
 }
 
+function ServerStatsCard({ metrics }: { metrics: ServerMetrics | undefined }) {
+  if (!metrics) {
+    return <div className="server-metrics"><strong>Last 24 hours</strong><span>Metrics loading…</span></div>;
+  }
+  return (
+    <div className="server-metrics">
+      <strong>Last 24 hours</strong>
+      <span>Status: {metrics.status}</span>
+      <span>Calls: {metrics.totalCalls}</span>
+      <span>Errors: {metrics.errors}</span>
+      <span>Rejected: {metrics.rejectedCount}</span>
+      <span>Error rate: {metrics.errorRate.toFixed(1)}%</span>
+      <span>Average: {metrics.averageDurationMs.toFixed(0)} ms</span>
+      <span>p95: {metrics.p95DurationMs.toFixed(0)} ms</span>
+      {metrics.lastError && <span className="server-error">{metrics.lastError}</span>}
+    </div>
+  );
+}
+
 function ServersPage() {
   const [servers, setServers] = useState<Server[]>([]);
+  const [metrics, setMetrics] = useState<Record<string, ServerMetrics>>({});
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
@@ -223,15 +254,23 @@ function ServersPage() {
 
   const refresh = useCallback(async () => {
     try {
-      const result = await api<{ servers: Server[] }>("/api/servers");
-      setServers(result.servers);
+      const [serverResult, metricsResult] = await Promise.all([
+        api<{ servers: Server[] }>("/api/servers"),
+        api<{ metrics: ServerMetrics[] }>("/api/metrics"),
+      ]);
+      setServers(serverResult.servers);
+      setMetrics(Object.fromEntries(metricsResult.metrics.map((item) => [item.serverSlug, item])));
       setError("");
     } catch (err) {
       setError(messageOf(err));
     }
   }, []);
 
-  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    void refresh();
+    const interval = window.setInterval(() => void refresh(), 15_000);
+    return () => window.clearInterval(interval);
+  }, [refresh]);
 
   async function createServer(event: FormEvent) {
     event.preventDefault();
@@ -318,6 +357,7 @@ function ServersPage() {
       <div className="server-grid">
         {servers.map((server) => <article className="panel server-card" key={server.id}>
           <div className="card-top"><div><span className="slug">{server.slug}</span><h2>{server.name}</h2></div><span className={`badge ${server.enabled ? server.status : "disabled"}`}>{server.enabled ? server.status : "Disabled"}</span></div>
+          <ServerStatsCard metrics={metrics[server.slug]} />
           {editing === server.id ? <form className="edit-form" onSubmit={(event) => { event.preventDefault(); void saveServer(server, event.currentTarget); }}>
             <label>Name<input name="name" defaultValue={server.name} required /></label>
             <label>URL<input name="url" type="url" defaultValue={server.url} required /></label>

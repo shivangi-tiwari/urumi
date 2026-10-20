@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNotNull, isNull, sql, type SQL } from "drizzle-orm";
 import argon2 from "argon2";
 import { Router } from "express";
 import { writeAdminAudit } from "./audit.js";
@@ -180,6 +180,55 @@ adminRouter.get("/servers", requireSession, requireRole("admin"), async (_req, r
     res.json({ servers: rows.map(publicServer) });
   } catch {
     res.status(500).json({ error: "Servers could not be loaded." });
+  }
+});
+
+adminRouter.get("/metrics", requireSession, requireRole("admin"), async (_req, res) => {
+  try {
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const [serverRows, callStats] = await Promise.all([
+      db.select({
+        serverSlug: servers.slug,
+        status: servers.status,
+        lastError: servers.lastError,
+      }).from(servers).orderBy(servers.slug),
+      db.select({
+        serverSlug: auditLogs.serverSlug,
+        totalCalls: sql<number>`count(*)::int`,
+        errors: sql<number>`count(*) filter (where ${auditLogs.outcome} = 'error')::int`,
+        rejectedCount: sql<number>`count(*) filter (where ${auditLogs.outcome} = 'rejected')::int`,
+        averageDurationMs: sql<number>`coalesce(avg(${auditLogs.durationMs}), 0)::float8`,
+        p95DurationMs: sql<number>`coalesce(percentile_cont(0.95) within group (order by ${auditLogs.durationMs}), 0)::float8`,
+      }).from(auditLogs)
+        .where(and(
+          gte(auditLogs.startedAt, since),
+          isNotNull(auditLogs.serverSlug),
+          inArray(auditLogs.source, ["chat", "mcp"]),
+        ))
+        .groupBy(auditLogs.serverSlug),
+    ]);
+    const statsBySlug = new Map(callStats.map((stats) => [stats.serverSlug, stats]));
+
+    res.json({
+      metrics: serverRows.map((server) => {
+        const stats = statsBySlug.get(server.serverSlug);
+        const totalCalls = stats?.totalCalls ?? 0;
+        const errors = stats?.errors ?? 0;
+        return {
+          serverSlug: server.serverSlug,
+          status: server.status,
+          lastError: server.lastError?.replace(/(https?:\/\/)[^/@\s]+@/gi, "$1[redacted]@") ?? null,
+          totalCalls,
+          errors,
+          rejectedCount: stats?.rejectedCount ?? 0,
+          errorRate: totalCalls === 0 ? 0 : (errors / totalCalls) * 100,
+          averageDurationMs: stats?.averageDurationMs ?? 0,
+          p95DurationMs: stats?.p95DurationMs ?? 0,
+        };
+      }),
+    });
+  } catch {
+    res.status(500).json({ error: "Server metrics could not be loaded." });
   }
 });
 

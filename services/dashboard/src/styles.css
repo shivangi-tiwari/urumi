@@ -55,6 +55,9 @@ h2 { font-size: 1.12rem; margin-bottom: .35rem; }
 .panel { background: #fff; border: 1px solid #e4e9e4; border-radius: 13px; box-shadow: 0 3px 12px #233b2c08; padding: 20px; }
 .server-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); gap: 15px; }
 .server-card { min-width: 0; }
+.server-metrics { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 14px; padding: 12px; border-radius: 8px; background: #f7f9f6; color: #59665f; font-size: .8rem; }
+.server-metrics strong { width: 100%; color: #36463f; }
+.server-metrics .server-error { flex-basis: 100%; }
 .card-top { display: flex; justify-content: space-between; gap: 14px; align-items: start; }
 .slug { color: #708078; font: 600 .78rem ui-monospace, monospace; }
 .badge { display: inline-flex; align-items: center; border-radius: 99px; padding: 5px 9px; color: #53615a; background: #eef1ed; font-size: .74rem; font-weight: 700; text-transform: capitalize; white-space: nowrap; }
