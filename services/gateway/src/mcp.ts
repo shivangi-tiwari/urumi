@@ -7,10 +7,12 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprot
 import { verifyChatJwt } from "./chat-jwt.js";
 import { db } from "./db/client.js";
 import { apiKeys, auditLogs, servers, users } from "./db/schema.js";
+import { configuredRateLimit, createTokenBucket } from "./rate-limit.js";
 import { getCachedTools, getClient } from "./upstream.js";
 
 const callTimeoutMs = 20_000;
 const maxToolNameLength = 64;
+const mcpRateLimit = createTokenBucket(configuredRateLimit("RATE_LIMIT_PER_MINUTE", 60));
 const defaultAdminOnlyTools = ["woo__create_product", "woo__update_order_status"];
 const adminOnlyTools = parseAdminOnlyTools(process.env.ADMIN_ONLY_TOOLS);
 
@@ -31,7 +33,7 @@ function parseAdminOnlyTools(raw: string | undefined): Set<string> {
   return new Set(parsed);
 }
 
-type AuditEntry = {
+export type AuditEntry = {
   userId: string | null;
   actorEmail: string | null;
   source: "chat" | "mcp";
@@ -43,7 +45,7 @@ type AuditEntry = {
   errorMessage: string | null;
 };
 
-async function writeAudit(entry: AuditEntry) {
+export async function writeAudit(entry: AuditEntry) {
   try {
     await db.insert(auditLogs).values(entry);
   } catch (err) {
@@ -52,7 +54,7 @@ async function writeAudit(entry: AuditEntry) {
 }
 
 type AuthResult =
-  | { ok: true; userId: string; actorEmail: string; role: "admin" | "member"; source: "chat" | "mcp" }
+  | { ok: true; userId: string; actorEmail: string; role: "admin" | "member"; source: "chat" | "mcp"; rateLimitKey: string }
   | { ok: false; userId: string | null; actorEmail: string | null; source: "chat" | "mcp"; error: string };
 
 async function authenticate(req: Request): Promise<AuthResult> {
@@ -90,7 +92,14 @@ async function authenticate(req: Request): Promise<AuthResult> {
         error: "Invalid or expired chat token.",
       };
     }
-    return { ok: true, userId, actorEmail: chatUser.email, role: chatUser.role, source: "chat" };
+    return {
+      ok: true,
+      userId,
+      actorEmail: chatUser.email,
+      role: chatUser.role,
+      source: "chat",
+      rateLimitKey: `chat:${userId}`,
+    };
   }
 
   const keyHash = createHash("sha256").update(token).digest("hex");
@@ -114,7 +123,14 @@ async function authenticate(req: Request): Promise<AuthResult> {
   }
 
   await db.update(apiKeys).set({ lastUsedAt: new Date() }).where(eq(apiKeys.id, key.id));
-  return { ok: true, userId: key.userId, actorEmail: user.email, role: user.role, source: "mcp" };
+  return {
+    ok: true,
+    userId: key.userId,
+    actorEmail: user.email,
+    role: user.role,
+    source: "mcp",
+    rateLimitKey: `api-key:${key.id}`,
+  };
 }
 
 function buildServer(userId: string, actorEmail: string, role: "admin" | "member", source: "chat" | "mcp") {
@@ -226,6 +242,30 @@ export async function handleMcp(req: Request, res: Response) {
         errorMessage: auth.error,
       });
       res.status(401).json({ jsonrpc: "2.0", error: { code: -32001, message: auth.error }, id: null });
+      return;
+    }
+
+    const limit = mcpRateLimit(auth.rateLimitKey);
+    if (!limit.allowed) {
+      const reason = "Rate limit exceeded for /mcp.";
+      await writeAudit({
+        userId: auth.userId,
+        actorEmail: auth.actorEmail,
+        source: auth.source,
+        serverSlug: null,
+        tool: null,
+        startedAt: new Date(),
+        durationMs: 0,
+        outcome: "rejected",
+        errorMessage: reason,
+      });
+      res.set("Retry-After", String(limit.retryAfterSeconds)).status(429).json({
+        error: `${reason} Retry after ${limit.retryAfterSeconds} seconds.`,
+      });
+      return;
+    }
+    if (req.method !== "POST") {
+      res.status(405).json({ error: "Use POST." });
       return;
     }
 

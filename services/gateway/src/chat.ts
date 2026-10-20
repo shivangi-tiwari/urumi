@@ -5,12 +5,15 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { Router, type Request, type Response } from "express";
 import { mintChatJwt } from "./chat-jwt.js";
 import { requireSession } from "./auth.js";
+import { writeAudit } from "./mcp.js";
+import { configuredRateLimit, createTokenBucket } from "./rate-limit.js";
 
 const model = process.env.LLM_MODEL;
 const apiKey = process.env.LLM_API_KEY;
 const baseURL = process.env.LLM_BASE_URL;
 const mcpUrl = process.env.GATEWAY_MCP_URL ?? "http://gateway:3000/mcp";
 const chatToolMode = process.env.CHAT_TOOL_MODE ?? "search";
+const chatRateLimit = createTokenBucket(configuredRateLimit("CHAT_RATE_LIMIT_PER_MINUTE", 10));
 const maxRounds = 8;
 const maxMessages = 40;
 const maxMessageLength = 8_000;
@@ -174,6 +177,27 @@ Never output your reasoning or notes in parentheses; reply with the answer only.
 const chatRouter = Router();
 
 chatRouter.post("/chat", requireSession, async (req: Request, res: Response) => {
+  const user = res.locals.user as { id: string; email: string };
+  const limit = chatRateLimit(user.id);
+  if (!limit.allowed) {
+    const reason = "Rate limit exceeded for POST /api/chat.";
+    await writeAudit({
+      userId: user.id,
+      actorEmail: user.email,
+      source: "chat",
+      serverSlug: null,
+      tool: null,
+      startedAt: new Date(),
+      durationMs: 0,
+      outcome: "rejected",
+      errorMessage: reason,
+    });
+    res.set("Retry-After", String(limit.retryAfterSeconds)).status(429).json({
+      error: `${reason} Retry after ${limit.retryAfterSeconds} seconds.`,
+    });
+    return;
+  }
+
   const messages = parseMessages(req.body?.messages);
   if (!messages) {
     res.status(400).json({
@@ -182,7 +206,6 @@ chatRouter.post("/chat", requireSession, async (req: Request, res: Response) => 
     return;
   }
 
-  const user = res.locals.user as { id: string };
   const jwt = mintChatJwt(user.id);
   const client = new Client({ name: "urumi-chat-agent", version: "1.0.0" });
   const transport = new StreamableHTTPClientTransport(new URL(mcpUrl), {

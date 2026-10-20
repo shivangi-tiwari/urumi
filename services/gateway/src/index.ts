@@ -18,10 +18,7 @@ app.use(express.json({ limit: "16kb" }));
 app.use("/api", authRouter);
 app.use("/api", adminRouter);
 app.use("/api", chatRouter);
-app.post("/mcp", handleMcp);
-app.all("/mcp", (_req, res) => {
-  res.status(405).json({ error: "Use POST." });
-});
+app.all("/mcp", handleMcp);
 
 app.get("/healthz", (_req, res) => {
   res.json({ status: "ok" });
