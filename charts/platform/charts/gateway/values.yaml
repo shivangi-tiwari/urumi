@@ -14,6 +14,7 @@ auth:
   cookieSecure: true
 
 ssrfAllowedHosts: "mcp-woo,mcp-notes,mcp-everything"
+adminOnlyTools: '["woo__create_product","woo__update_order_status"]'
 
 chatJwtSecret: ""
 llmApiKey: ""

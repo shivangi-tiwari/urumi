@@ -11,8 +11,25 @@ import { getCachedTools, getClient } from "./upstream.js";
 
 const callTimeoutMs = 20_000;
 const maxToolNameLength = 64;
+const defaultAdminOnlyTools = ["woo__create_product", "woo__update_order_status"];
+const adminOnlyTools = parseAdminOnlyTools(process.env.ADMIN_ONLY_TOOLS);
 
 type Outcome = "success" | "error" | "rejected";
+
+function parseAdminOnlyTools(raw: string | undefined): Set<string> {
+  if (raw === undefined) return new Set(defaultAdminOnlyTools);
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error("ADMIN_ONLY_TOOLS must be a JSON array of tool names.");
+  }
+  if (!Array.isArray(parsed) || !parsed.every((tool: unknown) => typeof tool === "string")) {
+    throw new Error("ADMIN_ONLY_TOOLS must be a JSON array of tool names.");
+  }
+  return new Set(parsed);
+}
 
 type AuditEntry = {
   userId: string | null;
@@ -35,7 +52,7 @@ async function writeAudit(entry: AuditEntry) {
 }
 
 type AuthResult =
-  | { ok: true; userId: string; actorEmail: string; source: "chat" | "mcp" }
+  | { ok: true; userId: string; actorEmail: string; role: "admin" | "member"; source: "chat" | "mcp" }
   | { ok: false; userId: string | null; actorEmail: string | null; source: "chat" | "mcp"; error: string };
 
 async function authenticate(req: Request): Promise<AuthResult> {
@@ -63,7 +80,7 @@ async function authenticate(req: Request): Promise<AuthResult> {
       };
     }
 
-    const [chatUser] = await db.select({ email: users.email }).from(users).where(eq(users.id, userId)).limit(1);
+    const [chatUser] = await db.select({ email: users.email, role: users.role }).from(users).where(eq(users.id, userId)).limit(1);
     if (!chatUser) {
       return {
         ok: false,
@@ -73,7 +90,7 @@ async function authenticate(req: Request): Promise<AuthResult> {
         error: "Invalid or expired chat token.",
       };
     }
-    return { ok: true, userId, actorEmail: chatUser.email, source: "chat" };
+    return { ok: true, userId, actorEmail: chatUser.email, role: chatUser.role, source: "chat" };
   }
 
   const keyHash = createHash("sha256").update(token).digest("hex");
@@ -82,7 +99,7 @@ async function authenticate(req: Request): Promise<AuthResult> {
     return { ok: false, userId: null, actorEmail: null, source: "mcp", error: "Unknown API key." };
   }
 
-  const [user] = await db.select({ email: users.email }).from(users).where(eq(users.id, key.userId)).limit(1);
+  const [user] = await db.select({ email: users.email, role: users.role }).from(users).where(eq(users.id, key.userId)).limit(1);
   if (!user) {
     return { ok: false, userId: null, actorEmail: null, source: "mcp", error: "Unknown API key." };
   }
@@ -97,10 +114,10 @@ async function authenticate(req: Request): Promise<AuthResult> {
   }
 
   await db.update(apiKeys).set({ lastUsedAt: new Date() }).where(eq(apiKeys.id, key.id));
-  return { ok: true, userId: key.userId, actorEmail: user.email, source: "mcp" };
+  return { ok: true, userId: key.userId, actorEmail: user.email, role: user.role, source: "mcp" };
 }
 
-function buildServer(userId: string, actorEmail: string, source: "chat" | "mcp") {
+function buildServer(userId: string, actorEmail: string, role: "admin" | "member", source: "chat" | "mcp") {
   const server = new Server(
     { name: "urumi-gateway", version: "1.0.0" },
     { capabilities: { tools: {} } },
@@ -121,7 +138,8 @@ function buildServer(userId: string, actorEmail: string, source: "chat" | "mcp")
     );
     const tools = results
       .flatMap((result) => (result.status === "fulfilled" ? result.value : []))
-      .filter((tool) => tool.name.length <= maxToolNameLength);
+      .filter((tool) => tool.name.length <= maxToolNameLength &&
+        (role === "admin" || !adminOnlyTools.has(tool.name)));
     return { tools };
   });
 
@@ -141,8 +159,16 @@ function buildServer(userId: string, actorEmail: string, source: "chat" | "mcp")
       message = text;
       return { isError: true, content: [{ type: "text" as const, text }] };
     };
+    const reject = (text: string) => {
+      outcome = "rejected";
+      message = text;
+      return { isError: true, content: [{ type: "text" as const, text }] };
+    };
 
     try {
+      if (role !== "admin" && adminOnlyTools.has(fullName)) {
+        return reject(`Tool '${fullName}' is restricted to admins.`);
+      }
       if (!slug) return fail(`Unknown tool '${fullName}'. Tool names look like <server>__<tool>.`);
 
       const [row] = await db.select().from(servers).where(eq(servers.slug, slug)).limit(1);
@@ -203,7 +229,7 @@ export async function handleMcp(req: Request, res: Response) {
       return;
     }
 
-    const server = buildServer(auth.userId, auth.actorEmail, auth.source);
+    const server = buildServer(auth.userId, auth.actorEmail, auth.role, auth.source);
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     res.on("close", () => {
       void transport.close();

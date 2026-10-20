@@ -77,6 +77,8 @@ spec:
               value: {{ .Values.auth.cookieSecure | quote }}
             - name: SSRF_ALLOWED_HOSTS
               value: {{ .Values.ssrfAllowedHosts | quote }}
+            - name: ADMIN_ONLY_TOOLS
+              value: {{ .Values.adminOnlyTools | quote }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           readinessProbe:

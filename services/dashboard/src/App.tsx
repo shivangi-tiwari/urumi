@@ -317,7 +317,7 @@ function ServersPage() {
       </form>}
       <div className="server-grid">
         {servers.map((server) => <article className="panel server-card" key={server.id}>
-          <div className="card-top"><div><span className="slug">{server.slug}</span><h2>{server.name}</h2></div><span className={`badge ${server.enabled ? server.status : "disabled"}`}>{server.enabled ? server.status : "disabled"}</span></div>
+          <div className="card-top"><div><span className="slug">{server.slug}</span><h2>{server.name}</h2></div><span className={`badge ${server.enabled ? server.status : "disabled"}`}>{server.enabled ? server.status : "Disabled"}</span></div>
           {editing === server.id ? <form className="edit-form" onSubmit={(event) => { event.preventDefault(); void saveServer(server, event.currentTarget); }}>
             <label>Name<input name="name" defaultValue={server.name} required /></label>
             <label>URL<input name="url" type="url" defaultValue={server.url} required /></label>
@@ -328,7 +328,7 @@ function ServersPage() {
             <p className="server-url">{server.url}</p>
             <p className="hint">Credential: {server.hasCredential ? "configured" : "none"} · Checked: {date(server.lastCheckedAt)}</p>
             {server.lastError && <p className="server-error">{server.lastError}</p>}
-            <details><summary>Tools ({server.tools.length})</summary>{server.tools.length ? <ul className="tool-list">{server.tools.map((tool) => <li key={tool}>{tool}</li>)}</ul> : <p className="hint">No tools available while disconnected.</p>}</details>
+            <div><p className="hint">Tools ({server.tools.length})</p>{server.tools.length ? <ul className="tool-list">{server.tools.map((tool) => <li key={tool}>{tool}</li>)}</ul> : <p className="hint">No tools available while disconnected.</p>}</div>
             <div className="actions card-actions"><button className="secondary" onClick={() => setEditing(server.id)}>Edit</button><button className="secondary" onClick={() => void toggleServer(server)}>{server.enabled ? "Disable" : "Enable"}</button><button className="danger" onClick={() => void deleteServer(server)}>Delete</button></div>
           </>}
         </article>)}
