@@ -6,7 +6,7 @@ metadata:
     {{- include "store.labels" . | nindent 4 }}
 spec:
   serviceName: mariadb
-  replicas: 1
+  replicas: {{ .Values.database.replicaCount | default 1 }}
   selector:
     matchLabels:
       app: mariadb
@@ -87,6 +87,9 @@ spec:
       spec:
         accessModes:
           - ReadWriteOnce
+        {{- with $.Values.global.storageClass }}
+        storageClassName: {{ . | quote }}
+        {{- end }}
         resources:
           requests:
             storage: {{ .Values.database.storage }}

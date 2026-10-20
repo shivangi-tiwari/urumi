@@ -81,6 +81,10 @@ spec:
               value: {{ .Values.ssrfAllowedHosts | quote }}
             - name: ADMIN_ONLY_TOOLS
               value: {{ .Values.adminOnlyTools | quote }}
+            - name: RATE_LIMIT_PER_MINUTE
+              value: {{ .Values.rateLimitPerMinute | default 60 | quote }}
+            - name: CHAT_RATE_LIMIT_PER_MINUTE
+              value: {{ .Values.chatRateLimitPerMinute | default 10 | quote }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           readinessProbe:

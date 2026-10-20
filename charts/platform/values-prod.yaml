@@ -1,3 +1,139 @@
-# Production overrides - fill domain/TLS/images when VPS is ready
-# hello:
-#   host: hello.example.com
+# Production placeholders: replace domains, registry paths, tags, issuer, and storage class before deploying.
+global:
+  storageClass: "<storage-class>"
+
+hello:
+  replicaCount: 0
+  host: "hello.<domain>"
+  ingress:
+    annotations:
+      cert-manager.io/cluster-issuer: "<cluster-issuer>"
+    tls:
+      - hosts:
+          - "hello.<domain>"
+        secretName: hello-tls
+
+store:
+  enabled: true
+  database:
+    replicaCount: 1
+    resources:
+      requests:
+        cpu: 500m
+        memory: 512Mi
+      limits:
+        cpu: "2"
+        memory: 2Gi
+  wordpress:
+    replicaCount: 1
+    siteUrl: "https://shop.<domain>"
+    resources:
+      requests:
+        cpu: 500m
+        memory: 512Mi
+      limits:
+        cpu: "2"
+        memory: 2Gi
+  ingress:
+    host: "shop.<domain>"
+    annotations:
+      cert-manager.io/cluster-issuer: "<cluster-issuer>"
+    tls:
+      - hosts:
+          - "shop.<domain>"
+        secretName: shop-tls
+
+mcp-woo:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: "<registry>/<organization>/mcp-woo"
+    tag: "<release-tag>"
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+mcp-notes:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: "<registry>/<organization>/mcp-notes"
+    tag: "<release-tag>"
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+mcp-everything:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: "<registry>/<organization>/mcp-everything"
+    tag: "<release-tag>"
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+postgres:
+  enabled: true
+  replicaCount: 1
+  image: "<registry>/<organization>/postgres:<release-tag>"
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 2Gi
+
+gateway:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: "<registry>/<organization>/gateway"
+    tag: "<release-tag>"
+  auth:
+    cookieSecure: true
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 2Gi
+
+dashboard:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: "<registry>/<organization>/dashboard"
+    tag: "<release-tag>"
+  ingress:
+    host: "app.<domain>"
+    annotations:
+      cert-manager.io/cluster-issuer: "<cluster-issuer>"
+    tls:
+      - hosts:
+          - "app.<domain>"
+        secretName: app-tls
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+networkPolicies:
+  enabled: true

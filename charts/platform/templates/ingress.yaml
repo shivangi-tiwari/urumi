@@ -5,7 +5,19 @@ metadata:
   namespace: urumi
   labels:
     app: hello
+  {{- with .Values.hello.ingress }}
+  {{- with .annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- end }}
 spec:
+  {{- with .Values.hello.ingress }}
+  {{- with .tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- end }}
   rules:
     - host: {{ .Values.hello.host | quote }}
       http:

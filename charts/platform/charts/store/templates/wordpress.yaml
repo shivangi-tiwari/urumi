@@ -7,6 +7,9 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
+  {{- with .Values.global.storageClass }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
   resources:
     requests:
       storage: {{ .Values.wordpress.storage }}
@@ -18,7 +21,7 @@ metadata:
   labels:
     {{- include "store.labels" . | nindent 4 }}
 spec:
-  replicas: 1
+  replicas: {{ .Values.wordpress.replicaCount | default 1 }}
   selector:
     matchLabels:
       app: wordpress
@@ -129,7 +132,15 @@ metadata:
   name: wordpress
   labels:
     {{- include "store.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
+  {{- with .Values.ingress.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   rules:
     - host: {{ .Values.ingress.host | quote }}
       http:
