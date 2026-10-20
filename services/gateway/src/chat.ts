@@ -108,6 +108,7 @@ function systemPrompt(): string {
   return `You are the Urumi MCP gateway assistant. Today is ${now} (Asia/Kolkata).
 Be warm, clear, and conversational. Answer the user's question directly, explain results in natural language, and use concise Markdown lists or tables only when they make the answer easier to read. When you use tools, summarize their results rather than repeating raw JSON. Never claim an action succeeded unless the tool result confirms success.
 For ANY question about products, orders, or other store data, you MUST call the relevant tool first, even if you answered something similar earlier in this conversation. Never answer store questions from memory. Never claim you called a tool or searched unless you actually called it. When listing products, call list_products with per_page 100 and no search filter unless the user asked to search. Never call create_product more than once for one request.
+If a create_product call fails or times out, do not retry it; the product may still have been created. Only report product details returned by tools. When listing products, show each returned product as a separate Markdown table row or bullet, and do not describe products as stray or test products unless a tool result confirms that.
 Never output your reasoning or notes in parentheses; reply with the answer only.`;
 }
 
@@ -131,6 +132,7 @@ chatRouter.post("/chat", requireSession, async (req: Request, res: Response) => 
     },
   });
   const toolCalls: ToolCallSummary[] = [];
+  let createProductAttempted = false;
 
   try {
     await client.connect(transport);
@@ -184,17 +186,32 @@ chatRouter.post("/chat", requireSession, async (req: Request, res: Response) => 
         let resultText: string;
         let ok = false;
         const started = Date.now();
+        const isCreateProduct = call.function.name === "create_product" ||
+          call.function.name.endsWith("__create_product");
         try {
-          const parsed: unknown = JSON.parse(call.function.arguments);
-          if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-            throw new Error("Tool arguments must be a JSON object.");
+          if (isCreateProduct && createProductAttempted) {
+            resultText = JSON.stringify({
+              isError: true,
+              content: "A create_product call was already attempted for this request; no additional call was made.",
+            });
+          } else {
+            const parsed: unknown = JSON.parse(call.function.arguments);
+            if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+              throw new Error("Tool arguments must be a JSON object.");
+            }
+            args = parsed as Record<string, unknown>;
+            if (isCreateProduct) createProductAttempted = true;
+            const result = await client.callTool({ name: call.function.name, arguments: args });
+            ok = result.isError !== true;
+            resultText = contentText(result, jwt);
           }
-          args = parsed as Record<string, unknown>;
-          const result = await client.callTool({ name: call.function.name, arguments: args });
-          ok = result.isError !== true;
-          resultText = contentText(result, jwt);
         } catch {
-          resultText = JSON.stringify({ isError: true, content: "Tool call failed." });
+          resultText = JSON.stringify({
+            isError: true,
+            content: isCreateProduct && createProductAttempted
+              ? "The create_product call failed or timed out. It may still have completed; do not retry it."
+              : "Tool call failed.",
+          });
         }
         const durationMs = Date.now() - started;
         toolCalls.push({

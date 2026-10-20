@@ -10,126 +10,128 @@ const wooApiPath = "/wp-json/wc/v3";
 const orderStatuses = ["pending", "processing", "on-hold", "completed", "cancelled", "refunded", "failed", "checkout-draft"] as const;
 const perPageSchema = z.number().int().min(1).max(100).optional().describe("Maximum number of results to return (1–100).");
 
-// Create MCP server once (to be reused across requests)
-const mcpServer = new McpServer({
-  name: "mcp-woo",
-  version: "1.0.0",
-});
+function buildServer() {
+  const mcpServer = new McpServer({
+    name: "mcp-woo",
+    version: "1.0.0",
+  });
 
-// Register all tools
-mcpServer.registerTool(
-  "list_products",
-  {
-    description: "List products from the WooCommerce store.",
-    inputSchema: {
-      search: z.string().optional().describe("Filter products by a search term."),
-      per_page: perPageSchema,
+  mcpServer.registerTool(
+    "list_products",
+    {
+      description: "List products from the WooCommerce store.",
+      inputSchema: {
+        search: z.string().optional().describe("Filter products by a search term."),
+        per_page: perPageSchema,
+      },
     },
-  },
-  async ({ search, per_page }) => {
-    try {
-      const query: Record<string, string> = {};
-      if (search) query.search = search;
-      if (per_page !== undefined) query.per_page = String(per_page);
-      const products = await wooRequest<WooProduct[]>("/products", { query });
-      return toolSuccess(products.map(({ id, name, price, status }) => ({ id, name, price, status })));
-    } catch (error) {
-      return toolFailure(error);
-    }
-  },
-);
+    async ({ search, per_page }) => {
+      try {
+        const query: Record<string, string> = {};
+        if (search) query.search = search;
+        if (per_page !== undefined) query.per_page = String(per_page);
+        const products = await wooRequest<WooProduct[]>("/products", { query });
+        return toolSuccess(products.map(({ id, name, price, status }) => ({ id, name, price, status })));
+      } catch (error) {
+        return toolFailure(error);
+      }
+    },
+  );
 
-mcpServer.registerTool(
-  "create_product",
-  {
-    description: "Create and publish a WooCommerce product.",
-    inputSchema: {
-      name: z.string().min(1).describe("Product name."),
-      regular_price: z.string().min(1).describe("Product regular price as a decimal string."),
-      description: z.string().optional().describe("Optional product description."),
+  mcpServer.registerTool(
+    "create_product",
+    {
+      description: "Create and publish a WooCommerce product.",
+      inputSchema: {
+        name: z.string().min(1).describe("Product name."),
+        regular_price: z.string().min(1).describe("Product regular price as a decimal string."),
+        description: z.string().optional().describe("Optional product description."),
+      },
     },
-  },
-  async ({ name, regular_price, description }) => {
-    try {
-      const product = await wooRequest<WooProduct>("/products", {
-        method: "POST",
-        body: { name, regular_price, description, status: "publish" },
-      });
-      return toolSuccess({
-        id: product.id,
-        name: product.name,
-        price: product.price,
-        status: product.status,
-      });
-    } catch (error) {
-      return toolFailure(error);
-    }
-  },
-);
+    async ({ name, regular_price, description }) => {
+      try {
+        const product = await wooRequest<WooProduct>("/products", {
+          method: "POST",
+          body: { name, regular_price, description, status: "publish" },
+        });
+        return toolSuccess({
+          id: product.id,
+          name: product.name,
+          price: product.price,
+          status: product.status,
+        });
+      } catch (error) {
+        return toolFailure(error);
+      }
+    },
+  );
 
-mcpServer.registerTool(
-  "list_orders",
-  {
-    description: "List WooCommerce orders, optionally filtering by creation date and status.",
-    inputSchema: {
-      after: z.string().datetime({ offset: true }).optional().describe("Return orders created after this ISO 8601 date and time."),
-      status: z.enum(orderStatuses).optional().describe("Filter by WooCommerce order status."),
-      per_page: perPageSchema,
+  mcpServer.registerTool(
+    "list_orders",
+    {
+      description: "List WooCommerce orders, optionally filtering by creation date and status.",
+      inputSchema: {
+        after: z.string().datetime({ offset: true }).optional().describe("Return orders created after this ISO 8601 date and time."),
+        status: z.enum(orderStatuses).optional().describe("Filter by WooCommerce order status."),
+        per_page: perPageSchema,
+      },
     },
-  },
-  async ({ after, status, per_page }) => {
-    try {
-      const query: Record<string, string> = {};
-      if (after) query.after = after;
-      if (status) query.status = status;
-      if (per_page !== undefined) query.per_page = String(per_page);
-      const orders = await wooRequest<WooOrder[]>("/orders", { query });
-      return toolSuccess(orders.map(trimOrder));
-    } catch (error) {
-      return toolFailure(error);
-    }
-  },
-);
+    async ({ after, status, per_page }) => {
+      try {
+        const query: Record<string, string> = {};
+        if (after) query.after = after;
+        if (status) query.status = status;
+        if (per_page !== undefined) query.per_page = String(per_page);
+        const orders = await wooRequest<WooOrder[]>("/orders", { query });
+        return toolSuccess(orders.map(trimOrder));
+      } catch (error) {
+        return toolFailure(error);
+      }
+    },
+  );
 
-mcpServer.registerTool(
-  "get_order",
-  {
-    description: "Get a WooCommerce order by its numeric ID.",
-    inputSchema: {
-      id: z.number().int().positive().describe("WooCommerce order ID."),
+  mcpServer.registerTool(
+    "get_order",
+    {
+      description: "Get a WooCommerce order by its numeric ID.",
+      inputSchema: {
+        id: z.number().int().positive().describe("WooCommerce order ID."),
+      },
     },
-  },
-  async ({ id }) => {
-    try {
-      const order = await wooRequest<WooOrder>(`/orders/${id}`);
-      return toolSuccess(trimOrder(order));
-    } catch (error) {
-      return toolFailure(error);
-    }
-  },
-);
+    async ({ id }) => {
+      try {
+        const order = await wooRequest<WooOrder>(`/orders/${id}`);
+        return toolSuccess(trimOrder(order));
+      } catch (error) {
+        return toolFailure(error);
+      }
+    },
+  );
 
-mcpServer.registerTool(
-  "update_order_status",
-  {
-    description: "Update the status of a WooCommerce order.",
-    inputSchema: {
-      id: z.number().int().positive().describe("WooCommerce order ID."),
-      status: z.enum(orderStatuses).describe("New WooCommerce order status."),
+  mcpServer.registerTool(
+    "update_order_status",
+    {
+      description: "Update the status of a WooCommerce order.",
+      inputSchema: {
+        id: z.number().int().positive().describe("WooCommerce order ID."),
+        status: z.enum(orderStatuses).describe("New WooCommerce order status."),
+      },
     },
-  },
-  async ({ id, status }) => {
-    try {
-      const order = await wooRequest<WooOrder>(`/orders/${id}`, {
-        method: "PUT",
-        body: { status },
-      });
-      return toolSuccess(trimOrder(order));
-    } catch (error) {
-      return toolFailure(error);
-    }
-  },
-);
+    async ({ id, status }) => {
+      try {
+        const order = await wooRequest<WooOrder>(`/orders/${id}`, {
+          method: "PUT",
+          body: { status },
+        });
+        return toolSuccess(trimOrder(order));
+      } catch (error) {
+        return toolFailure(error);
+      }
+    },
+  );
+
+  return mcpServer;
+}
 
 type WooProduct = {
   id: number;
@@ -246,6 +248,7 @@ app.get("/healthz", (_req, res) => {
 });
 
 app.post("/mcp", async (req, res) => {
+  const mcpServer = buildServer();
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
   res.on("close", () => {
     void transport.close();

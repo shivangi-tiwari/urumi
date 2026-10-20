@@ -4,6 +4,12 @@ function Build-Gateway {
   docker build -t gateway:local services/gateway
   k3d image import gateway:local -c urumi
 }
+function Build-McpWoo {
+  Push-Location services\mcp-woo; npm run build; $ok = $LASTEXITCODE; Pop-Location
+  if ($ok -ne 0) { throw "mcp-woo build failed - nothing deployed" }
+  docker build -t mcp-woo:local services/mcp-woo
+  k3d image import mcp-woo:local -c urumi
+}
 function Build-Dashboard {
   Push-Location services\dashboard; npm run build; $ok = $LASTEXITCODE; Pop-Location
   if ($ok -ne 0) { throw "dashboard build failed - nothing deployed" }
