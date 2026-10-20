@@ -39,3 +39,6 @@ gateway:
 
 dashboard:
   enabled: false
+
+networkPolicies:
+  enabled: false

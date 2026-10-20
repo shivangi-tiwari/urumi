@@ -105,7 +105,10 @@ function systemPrompt(): string {
     dateStyle: "full",
     timeStyle: "long",
   });
-  return `You are the Urumi MCP gateway assistant. Today is ${now} (Asia/Kolkata). Use available tools when they help answer the user.`;
+  return `You are the Urumi MCP gateway assistant. Today is ${now} (Asia/Kolkata).
+Be warm, clear, and conversational. Answer the user's question directly, explain results in natural language, and use concise Markdown lists or tables only when they make the answer easier to read. When you use tools, summarize their results rather than repeating raw JSON. Never claim an action succeeded unless the tool result confirms success.
+For ANY question about products, orders, or other store data, you MUST call the relevant tool first, even if you answered something similar earlier in this conversation. Never answer store questions from memory. Never claim you called a tool or searched unless you actually called it. When listing products, call list_products with per_page 100 and no search filter unless the user asked to search. Never call create_product more than once for one request.
+Never output your reasoning or notes in parentheses; reply with the answer only.`;
 }
 
 const chatRouter = Router();
@@ -148,8 +151,10 @@ chatRouter.post("/chat", requireSession, async (req: Request, res: Response) => 
     for (let round = 0; round < maxRounds; round += 1) {
       const completion = await openai.chat.completions.create({
         model,
+        max_tokens: 600,
         messages: conversation,
         tools: tools.length > 0 ? tools : undefined,
+        tool_choice: round === 0 ? "required" : "auto",
       });
       const response = completion.choices[0]?.message;
       if (!response) {

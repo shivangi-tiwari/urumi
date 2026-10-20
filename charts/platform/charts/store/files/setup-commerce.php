@@ -1,3 +1,4 @@
+
 <?php
 
 $cod_settings = get_option('woocommerce_cod_settings', array());
@@ -6,6 +7,9 @@ $cod_settings['title'] = 'Cash on Delivery';
 $cod_settings['description'] = '';
 $cod_settings['instructions'] = '';
 update_option('woocommerce_cod_settings', $cod_settings);
+update_option('woocommerce_coming_soon', 'no');
+update_option('woocommerce_store_pages_only', 'no');
+echo "WooCommerce store visibility set to Live.\n";
 
 if (wc_get_products(array('limit' => 1))) {
     return;

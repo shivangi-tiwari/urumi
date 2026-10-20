@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
 
 type User = { id: string; email: string; role: "admin" | "member" };
 type Server = {
@@ -42,7 +42,18 @@ type AuditEntry = {
   outcome: "success" | "error" | "rejected";
   errorMessage: string | null;
 };
-type Page = "servers" | "members" | "keys" | "audit";
+type ChatToolCall = {
+  name: string;
+  args: Record<string, unknown>;
+  durationMs: number;
+  ok: boolean;
+};
+type ChatTurn = {
+  role: "user" | "assistant";
+  content: string;
+  toolCalls?: ChatToolCall[];
+};
+type Page = "servers" | "members" | "chat" | "keys" | "audit";
 
 async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(path, {
@@ -75,6 +86,87 @@ function messageOf(error: unknown): string {
 
 function date(value: string | null): string {
   return value ? new Date(value).toLocaleString() : "Never";
+}
+
+function markdownInline(text: string, keyPrefix: string): ReactNode[] {
+  return text.split(/(\*\*[^*]+\*\*|`[^`]+`|\*[^*]+\*)/g).map((part, index) => {
+    const key = `${keyPrefix}-${index}`;
+    if (part.startsWith("**") && part.endsWith("**")) return <strong key={key}>{part.slice(2, -2)}</strong>;
+    if (part.startsWith("`") && part.endsWith("`")) return <code key={key}>{part.slice(1, -1)}</code>;
+    if (part.startsWith("*") && part.endsWith("*")) return <em key={key}>{part.slice(1, -1)}</em>;
+    return part;
+  });
+}
+
+function markdownCells(line: string): string[] {
+  return line.trim().replace(/^\||\|$/g, "").split("|").map((cell) => cell.trim());
+}
+
+function markdownContent(content: string): ReactNode[] {
+  const lines = content.split(/\r?\n/);
+  const blocks: ReactNode[] = [];
+  let index = 0;
+
+  while (index < lines.length) {
+    const line = lines[index].trim();
+    if (!line) {
+      index += 1;
+      continue;
+    }
+
+    const heading = /^(#{1,6})\s+(.+)$/.exec(line);
+    if (heading) {
+      const level = heading[1].length;
+      const Heading = `h${level}` as "h1" | "h2" | "h3" | "h4" | "h5" | "h6";
+      blocks.push(<Heading key={`heading-${index}`}>{markdownInline(heading[2], `heading-${index}`)}</Heading>);
+      index += 1;
+      continue;
+    }
+
+    const nextLine = lines[index + 1]?.trim() ?? "";
+    if (line.includes("|") && /^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$/.test(nextLine)) {
+      const headers = markdownCells(line);
+      index += 2;
+      const rows: string[][] = [];
+      while (index < lines.length && lines[index].trim().includes("|")) {
+        rows.push(markdownCells(lines[index]));
+        index += 1;
+      }
+      blocks.push(<div className="markdown-table-wrap" key={`table-${index}`}>
+        <table className="markdown-table">
+          <thead><tr>{headers.map((cell, cellIndex) => <th key={cellIndex}>{markdownInline(cell, `table-head-${index}-${cellIndex}`)}</th>)}</tr></thead>
+          <tbody>{rows.map((row, rowIndex) => <tr key={rowIndex}>{headers.map((_, cellIndex) => <td key={cellIndex}>{markdownInline(row[cellIndex] ?? "", `table-cell-${index}-${rowIndex}-${cellIndex}`)}</td>)}</tr>)}</tbody>
+        </table>
+      </div>);
+      continue;
+    }
+
+    const listMatch = /^([-*]|\d+\.)\s+(.+)$/.exec(line);
+    if (listMatch) {
+      const ordered = /^\d+\./.test(listMatch[1]);
+      const items: string[] = [];
+      while (index < lines.length) {
+        const item = /^([-*]|\d+\.)\s+(.+)$/.exec(lines[index].trim());
+        if (!item || /^\d+\./.test(item[1]) !== ordered) break;
+        items.push(item[2]);
+        index += 1;
+      }
+      const List = ordered ? "ol" : "ul";
+      blocks.push(<List key={`list-${index}`}>{items.map((item, itemIndex) => <li key={itemIndex}>{markdownInline(item, `list-${index}-${itemIndex}`)}</li>)}</List>);
+      continue;
+    }
+
+    const paragraph: string[] = [];
+    while (index < lines.length && lines[index].trim()) {
+      const current = lines[index].trim();
+      if (paragraph.length && (/^#{1,6}\s+/.test(current) || /^([-*]|\d+\.)\s+/.test(current))) break;
+      paragraph.push(current);
+      index += 1;
+    }
+    blocks.push(<p key={`paragraph-${index}`}>{markdownInline(paragraph.join(" "), `paragraph-${index}`)}</p>);
+  }
+
+  return blocks;
 }
 
 function Login({ onLogin }: { onLogin: (user: User) => void }) {
@@ -445,6 +537,101 @@ function MembersPage() {
   </section>;
 }
 
+function ChatPage() {
+  const [turns, setTurns] = useState<ChatTurn[]>([]);
+  const [input, setInput] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function sendMessage(event: FormEvent) {
+    event.preventDefault();
+    const content = input.trim();
+    if (!content || busy) return;
+    if (content.length > 8_000) {
+      setError("Messages must be 8,000 characters or fewer.");
+      return;
+    }
+    if (turns.length >= 40) {
+      setError("This conversation reached its 40-message limit. Start a new chat to continue.");
+      return;
+    }
+
+    setBusy(true);
+    setError("");
+    try {
+      const messages = [
+        ...turns.map(({ role, content: message }) => ({ role, content: message })),
+        { role: "user" as const, content },
+      ];
+      const result = await api<{ answer: string; toolCalls: ChatToolCall[] }>("/api/chat", {
+        method: "POST",
+        body: JSON.stringify({ messages }),
+      });
+      setTurns([
+        ...turns,
+        { role: "user", content },
+        { role: "assistant", content: result.answer, toolCalls: result.toolCalls },
+      ]);
+      setInput("");
+    } catch (err) {
+      setError(messageOf(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function startNewChat() {
+    if (busy) return;
+    setTurns([]);
+    setInput("");
+    setError("");
+  }
+
+  return <section className="page chat-page">
+    <div className="page-heading">
+      <div><p className="eyebrow">ASSISTANT</p><h1>Chat</h1><p className="muted">Ask questions and use your connected MCP tools through the gateway.</p></div>
+      <button className="secondary" onClick={startNewChat} disabled={busy || turns.length === 0}>New chat</button>
+    </div>
+    {error && <div className="alert error" role="alert">{error}</div>}
+    <div className="chat-panel panel">
+      <div className="chat-transcript" aria-live="polite">
+        {!turns.length && <div className="chat-empty">
+          <span className="brand-mark">U</span>
+          <h2>What would you like to know?</h2>
+          <p className="muted">For example: “List the products in the store.”</p>
+        </div>}
+        {turns.map((turn, index) => <article className={`chat-message ${turn.role}`} key={`${turn.role}-${index}`}>
+          <p className="chat-role">{turn.role === "user" ? "You" : "Urumi assistant"}</p>
+          <div className="chat-content">{markdownContent(turn.content || (turn.role === "assistant" ? "The assistant returned an empty answer." : ""))}</div>
+          {turn.toolCalls && turn.toolCalls.length > 0 && <div className="chat-tools">
+            <p className="chat-role">Tool calls</p>
+            {turn.toolCalls.map((call, callIndex) => <details className="chat-tool" key={`${call.name}-${callIndex}`}>
+              <summary><code>{call.name}</code><span className={`badge ${call.ok ? "success" : "error"}`}>{call.ok ? "success" : "error"}</span><span className="hint">{call.durationMs} ms</span></summary>
+              <pre>{JSON.stringify(call.args, null, 2)}</pre>
+            </details>)}
+          </div>}
+        </article>)}
+      </div>
+      <form className="chat-composer" onSubmit={(event) => void sendMessage(event)}>
+        <label htmlFor="chat-input">Message</label>
+        <textarea
+          id="chat-input"
+          value={input}
+          onChange={(event) => setInput(event.target.value)}
+          placeholder="Ask about products, orders, or your connected tools..."
+          maxLength={8_000}
+          rows={3}
+          disabled={busy}
+        />
+        <div className="chat-composer-footer">
+          <span className="hint">{input.length.toLocaleString()} / 8,000 · Up to 20 exchanges per chat</span>
+          <button className="primary" disabled={busy || !input.trim()}>{busy ? "Thinking..." : "Send"}</button>
+        </div>
+      </form>
+    </div>
+  </section>;
+}
+
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [page, setPage] = useState<Page>("servers");
@@ -474,11 +661,12 @@ export default function App() {
   const nav: Array<{ id: Page; label: string; adminOnly?: boolean }> = [
     { id: "servers", label: "Servers", adminOnly: true },
     { id: "members", label: "Members", adminOnly: true },
+    { id: "chat", label: "Chat" },
     { id: "keys", label: "API keys" },
     { id: "audit", label: "Audit log", adminOnly: true },
   ];
   const allowedNav = nav.filter((item) => !item.adminOnly || user.role === "admin");
-  const currentPage = allowedNav.some((item) => item.id === page) ? page : "keys";
+  const currentPage = allowedNav.some((item) => item.id === page) ? page : user.role === "admin" ? "servers" : "chat";
 
   return <div className="app-shell">
     <aside className="sidebar">
@@ -491,6 +679,7 @@ export default function App() {
       {error && <div className="alert error">{error}</div>}
       {currentPage === "servers" && user.role === "admin" && <ServersPage />}
       {currentPage === "members" && user.role === "admin" && <MembersPage />}
+      {currentPage === "chat" && <ChatPage />}
       {currentPage === "keys" && <KeysPage user={user} />}
       {currentPage === "audit" && user.role === "admin" && <AuditPage />}
     </main>

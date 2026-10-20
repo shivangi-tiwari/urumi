@@ -1,6 +1,7 @@
 # Local overrides (k3d).
 hello:
   host: hello.127.0.0.1.nip.io
+  replicas: 0
 
 store:
   enabled: true
@@ -30,3 +31,6 @@ dashboard:
   enabled: true
   ingress:
     host: app.127.0.0.1.nip.io
+
+networkPolicies:
+  enabled: true
