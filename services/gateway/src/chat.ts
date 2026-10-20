@@ -10,6 +10,7 @@ const model = process.env.LLM_MODEL;
 const apiKey = process.env.LLM_API_KEY;
 const baseURL = process.env.LLM_BASE_URL;
 const mcpUrl = process.env.GATEWAY_MCP_URL ?? "http://gateway:3000/mcp";
+const chatToolMode = process.env.CHAT_TOOL_MODE ?? "search";
 const maxRounds = 8;
 const maxMessages = 40;
 const maxMessageLength = 8_000;
@@ -17,6 +18,9 @@ const maxMessageLength = 8_000;
 if (!model) throw new Error("LLM_MODEL must be set.");
 if (!apiKey) throw new Error("LLM_API_KEY must be set.");
 if (!baseURL) throw new Error("LLM_BASE_URL must be set.");
+if (chatToolMode !== "search" && chatToolMode !== "all") {
+  throw new Error('CHAT_TOOL_MODE must be "search" or "all".');
+}
 const configuredApiKey: string = apiKey;
 
 const openai = new OpenAI({ apiKey: configuredApiKey, baseURL });
@@ -28,6 +32,61 @@ type ToolCallSummary = {
   durationMs: number;
   ok: boolean;
 };
+
+const searchToolsDefinition: ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "search_tools",
+    description: "Find relevant tools by keyword in their names and descriptions.",
+    parameters: {
+      type: "object",
+      properties: { query: { type: "string", description: "Keywords describing the tool you need." } },
+      required: ["query"],
+      additionalProperties: false,
+    },
+  },
+};
+
+const callToolDefinition: ChatCompletionTool = {
+  type: "function",
+  function: {
+    name: "call_tool",
+    description: "Call a tool by its exact exposed name returned by search_tools.",
+    parameters: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Exact exposed tool name from search_tools." },
+        arguments: { type: "object", additionalProperties: true, description: "Arguments for that tool." },
+      },
+      required: ["name", "arguments"],
+      additionalProperties: false,
+    },
+  },
+};
+
+function searchVisibleTools(
+  tools: Awaited<ReturnType<Client["listTools"]>>["tools"],
+  query: string,
+): Array<{ name: string; description: string }> {
+  const keywords = [...new Set(query.toLowerCase().match(/[\p{L}\p{N}_]+/gu) ?? [])];
+  if (keywords.length === 0) return [];
+
+  return tools
+    .map((tool, index) => {
+      const name = tool.name.toLowerCase();
+      const description = (tool.description ?? "").toLowerCase();
+      const score = keywords.reduce((total, keyword) =>
+        total + (name.includes(keyword) ? 3 : 0) + (description.includes(keyword) ? 1 : 0), 0);
+      return { tool, index, score };
+    })
+    .filter(({ score }) => score > 0)
+    .sort((left, right) => right.score - left.score || left.index - right.index)
+    .slice(0, 8)
+    .map(({ tool }) => ({
+      name: tool.name,
+      description: (tool.description ?? "").slice(0, 160),
+    }));
+}
 
 function parseMessages(value: unknown): ChatMessage[] | undefined {
   if (!Array.isArray(value) || value.length === 0 || value.length > maxMessages) return undefined;
@@ -137,16 +196,24 @@ chatRouter.post("/chat", requireSession, async (req: Request, res: Response) => 
   try {
     await client.connect(transport);
     const listed = await client.listTools();
-    const tools: ChatCompletionTool[] = listed.tools.map((tool) => ({
-      type: "function",
-      function: {
-        name: tool.name,
-        description: tool.description,
-        parameters: tool.inputSchema as Record<string, unknown>,
-      },
-    }));
+    const visibleTools = listed.tools;
+    const tools: ChatCompletionTool[] = chatToolMode === "search"
+      ? [searchToolsDefinition, callToolDefinition]
+      : visibleTools.map((tool) => ({
+          type: "function",
+          function: {
+            name: tool.name,
+            description: tool.description,
+            parameters: tool.inputSchema as Record<string, unknown>,
+          },
+      }));
     const conversation: ChatCompletionMessageParam[] = [
-      { role: "system", content: systemPrompt() },
+      {
+        role: "system",
+        content: `${systemPrompt()}${chatToolMode === "search"
+          ? "\nIn search mode, use search_tools to find relevant tools, then call them with call_tool using the exact returned name and their required arguments."
+          : ""}`,
+      },
       ...messages,
     ];
 
@@ -186,24 +253,56 @@ chatRouter.post("/chat", requireSession, async (req: Request, res: Response) => 
         let resultText: string;
         let ok = false;
         const started = Date.now();
-        const isCreateProduct = call.function.name === "create_product" ||
-          call.function.name.endsWith("__create_product");
+        let toolName = call.function.name;
+        let toolArgs = args;
+        let showToolCall = chatToolMode === "all";
+        let isCreateProduct = false;
         try {
-          if (isCreateProduct && createProductAttempted) {
+          const parsed: unknown = JSON.parse(call.function.arguments);
+          if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+            throw new Error("Tool arguments must be a JSON object.");
+          }
+          args = parsed as Record<string, unknown>;
+
+          if (chatToolMode === "search" && call.function.name === "search_tools") {
+            if (typeof args.query !== "string") throw new Error("search_tools query must be a string.");
             resultText = JSON.stringify({
-              isError: true,
-              content: "A create_product call was already attempted for this request; no additional call was made.",
+              isError: false,
+              content: searchVisibleTools(visibleTools, args.query),
             });
+            showToolCall = false;
           } else {
-            const parsed: unknown = JSON.parse(call.function.arguments);
-            if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-              throw new Error("Tool arguments must be a JSON object.");
+            if (chatToolMode === "search") {
+              if (call.function.name !== "call_tool") {
+                throw new Error("Only search_tools and call_tool are available in search mode.");
+              }
+              if (
+                typeof args.name !== "string" ||
+                typeof args.arguments !== "object" ||
+                args.arguments === null ||
+                Array.isArray(args.arguments)
+              ) {
+                throw new Error("call_tool requires a tool name and an arguments object.");
+              }
+              toolName = args.name;
+              toolArgs = args.arguments as Record<string, unknown>;
+              showToolCall = true;
+            } else {
+              toolArgs = args;
             }
-            args = parsed as Record<string, unknown>;
-            if (isCreateProduct) createProductAttempted = true;
-            const result = await client.callTool({ name: call.function.name, arguments: args });
-            ok = result.isError !== true;
-            resultText = contentText(result, jwt);
+
+            isCreateProduct = toolName === "create_product" || toolName.endsWith("__create_product");
+            if (isCreateProduct && createProductAttempted) {
+              resultText = JSON.stringify({
+                isError: true,
+                content: "A create_product call was already attempted for this request; no additional call was made.",
+              });
+            } else {
+              if (isCreateProduct) createProductAttempted = true;
+              const result = await client.callTool({ name: toolName, arguments: toolArgs });
+              ok = result.isError !== true;
+              resultText = contentText(result, jwt);
+            }
           }
         } catch {
           resultText = JSON.stringify({
@@ -214,12 +313,14 @@ chatRouter.post("/chat", requireSession, async (req: Request, res: Response) => 
           });
         }
         const durationMs = Date.now() - started;
-        toolCalls.push({
-          name: call.function.name,
-          args: redactToolArgs(args),
-          durationMs,
-          ok,
-        });
+        if (showToolCall) {
+          toolCalls.push({
+            name: toolName,
+            args: redactToolArgs(toolArgs),
+            durationMs,
+            ok,
+          });
+        }
         conversation.push({
           role: "tool",
           tool_call_id: call.id,

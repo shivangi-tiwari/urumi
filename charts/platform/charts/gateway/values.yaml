@@ -19,6 +19,7 @@ adminOnlyTools: '["woo__create_product","woo__update_order_status"]'
 chatJwtSecret: ""
 llmApiKey: ""
 chat:
+  toolMode: search
   baseURL: https://api.openai.com/v1
   model: gpt-4o-mini
   mcpUrl: http://gateway:3000/mcp
