@@ -1,3 +1,5 @@
+demo link https://vimeo.com/1239588452?share=copy&fl=sv&fe=ci
+
 # Urumi MCP Gateway
 
 Urumi runs a WooCommerce store, MCP servers, an MCP gateway, and a React dashboard on Kubernetes. The gateway is the only component that connects to upstream MCP servers. Dashboard chat and external MCP clients both use the gateway’s `/mcp` endpoint.
